@@ -1,5 +1,6 @@
 package org.example.user.controller;
 
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import org.example.common.utils.Result;
 import org.example.user.entity.User;
 import org.example.user.service.UserService;
@@ -22,7 +23,11 @@ public class AdminUserController {
      */
     @GetMapping("/list")
     public Result<List<User>> getAllUsers(@RequestHeader("Authorization") String token) {
-        List<User> list = userService.list();
+        // 使用 queryChain 方便进行条件过滤
+        List<User> list = userService.lambdaQuery()
+                .notLikeRight(User::getUsername, "tmp_") // 排除 tmp_ 开头的用户
+                .list();
+
         list.forEach(u -> u.setPassword(null));
         return Result.success(list);
     }
@@ -47,4 +52,7 @@ public class AdminUserController {
         userService.updateById(user);
         return Result.success(null);
     }
+
+
+
 }

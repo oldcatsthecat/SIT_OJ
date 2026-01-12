@@ -16,4 +16,6 @@ public interface UserService extends IService<User> {
     void updateUserInfo(User user, String code);
 
     void resetPassword(Map<String, Object> params);
+
+    void clearTemporaryUsers();
 }

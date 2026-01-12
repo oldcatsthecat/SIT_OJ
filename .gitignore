@@ -3,7 +3,7 @@
 *.iml
 
 /sit_oj_backend/.idea
-/sit_oj_frontted/
+/sit_oj_frontend/
 
 # 忽略后端编译文件
 **/target/

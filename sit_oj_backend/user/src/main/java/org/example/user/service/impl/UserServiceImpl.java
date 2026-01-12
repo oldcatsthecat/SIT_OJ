@@ -2,6 +2,7 @@ package org.example.user.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,6 +23,9 @@ import java.util.Map;
 
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
+
+    @Autowired
+    private UserMapper userMapper;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -239,6 +243,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             System.err.println("邮件发送失败: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    public void clearTemporaryUsers() {
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.likeRight(User::getUsername, "tmp_")
+                .lt(User::getCodeExpireTime, LocalDateTime.now()); // 只删过期时间早于现在的
+
+        userMapper.delete(wrapper);
     }
 
 }
