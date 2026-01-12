@@ -1,4 +1,4 @@
-version: "3"
+version: "3.8"
 
 services:
   # --- 基础中间件 ---
@@ -7,6 +7,8 @@ services:
   oj-nacos:
     image: nacos/nacos-server:v2.2.3
     container_name: oj-nacos
+    networks:
+      - oj-net
     environment:
       - MODE=standalone
       - JVM_XMS=384m
@@ -19,19 +21,21 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/index.html"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     restart: always
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 768M
         reservations:
-          memory: 256M
+          memory: 384M
 
   # MySQL: 数据库
   oj-mysql:
     image: mysql:8.0
     container_name: oj-mysql
+    networks:
+      - oj-net
     restart: always
     environment:
       - MYSQL_ROOT_PASSWORD=13575877459hhh
@@ -61,6 +65,8 @@ services:
   oj-judge-server:
     image: registry.cn-hongkong.aliyuncs.com/oj-image/judge:1.6.1
     container_name: oj-judge-server
+    networks:
+      - oj-net
     restart: always
     read_only: true
     cap_drop:
@@ -93,25 +99,29 @@ services:
   oj-gateway:
     build: ./sit_oj_backend/gateway
     container_name: oj-gateway
+    networks:
+      - oj-net
     ports:
       - "8001:8001"
     depends_on:
       oj-nacos:
         condition: service_healthy
     environment:
-      - JAVA_OPTS=-Xms64m -Xmx128m
+      - JAVA_OPTS=-Xms128m -Xmx256m
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
     restart: always
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 400M
         reservations:
-          memory: 128M
+          memory: 256M
 
   oj-user:
     build: ./sit_oj_backend/user
     container_name: oj-user
+    networks:
+      - oj-net
     depends_on:
       oj-mysql:
         condition: service_healthy
@@ -132,6 +142,8 @@ services:
   oj-problem:
     build: ./sit_oj_backend/problem
     container_name: oj-problem
+    networks:
+      - oj-net
     depends_on:
       oj-mysql:
         condition: service_healthy
@@ -155,6 +167,8 @@ services:
   oj-submission:
     build: ./sit_oj_backend/submission
     container_name: oj-submission
+    networks:
+      - oj-net
     depends_on:
       oj-mysql:
         condition: service_healthy
@@ -175,6 +189,8 @@ services:
   oj-judge-logic:
     build: ./sit_oj_backend/judge
     container_name: oj-judge-logic
+    networks:
+      - oj-net
     depends_on:
       oj-nacos:
         condition: service_healthy
@@ -197,6 +213,8 @@ services:
   oj-frontend:
     image: nginx:alpine
     container_name: oj-frontend
+    networks:
+      - oj-net
     ports:
       - "80:80"
     volumes:
@@ -208,6 +226,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 64M
+          memory: 128M
         reservations:
-          memory: 32M
+          memory: 64M
+
+networks:
+  oj-net:
+    driver: bridge
