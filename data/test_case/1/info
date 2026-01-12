@@ -1,0 +1,75 @@
+{
+  "spj" : false,
+  "test_cases" : {
+    "1" : {
+      "input_name" : "1.in",
+      "output_name" : "1.out",
+      "stripped_output_md5" : "b6617980ce90f637e68c3ebe8b9be745",
+      "input_size" : 182,
+      "output_size" : 4
+    },
+    "2" : {
+      "input_name" : "2.in",
+      "output_name" : "2.out",
+      "stripped_output_md5" : "c982d553a65b41095d4a300428fddef7",
+      "input_size" : 2077,
+      "output_size" : 6
+    },
+    "3" : {
+      "input_name" : "3.in",
+      "output_name" : "3.out",
+      "stripped_output_md5" : "631d56fafecdfcaa0afcea43503dd8f4",
+      "input_size" : 1479,
+      "output_size" : 6
+    },
+    "4" : {
+      "input_name" : "4.in",
+      "output_name" : "4.out",
+      "stripped_output_md5" : "dc2b690516158a874dd8aabe1365c6a0",
+      "input_size" : 2219,
+      "output_size" : 4
+    },
+    "5" : {
+      "input_name" : "5.in",
+      "output_name" : "5.out",
+      "stripped_output_md5" : "46edbd1ce3b5994a9e78ede3e5588382",
+      "input_size" : 751,
+      "output_size" : 5
+    },
+    "6" : {
+      "input_name" : "6.in",
+      "output_name" : "6.out",
+      "stripped_output_md5" : "1d27b60ebee50cc63c1cdc8e9bda7058",
+      "input_size" : 3195,
+      "output_size" : 5
+    },
+    "7" : {
+      "input_name" : "7.in",
+      "output_name" : "7.out",
+      "stripped_output_md5" : "8caa38721906c1a0bb95c80fab33a893",
+      "input_size" : 2102,
+      "output_size" : 4
+    },
+    "8" : {
+      "input_name" : "8.in",
+      "output_name" : "8.out",
+      "stripped_output_md5" : "971eb27c6345932b82b70414028d7183",
+      "input_size" : 1595,
+      "output_size" : 4
+    },
+    "9" : {
+      "input_name" : "9.in",
+      "output_name" : "9.out",
+      "stripped_output_md5" : "ff356077cd5c5aed76a08459f3b6416d",
+      "input_size" : 4233,
+      "output_size" : 5
+    },
+    "10" : {
+      "input_name" : "10.in",
+      "output_name" : "10.out",
+      "stripped_output_md5" : "709f47a06f500a8cd19c55675f9d5d09",
+      "input_size" : 2037,
+      "output_size" : 5
+    }
+  }
+}

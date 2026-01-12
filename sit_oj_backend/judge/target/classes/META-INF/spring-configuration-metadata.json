@@ -1,0 +1,58 @@
+{
+  "groups": [
+    {
+      "name": "jwt",
+      "type": "org.example.judge.config.JwtProperties",
+      "sourceType": "org.example.judge.config.JwtProperties"
+    },
+    {
+      "name": "oj.judge",
+      "type": "org.example.judge.config.JudgeConfig",
+      "sourceType": "org.example.judge.config.JudgeConfig"
+    },
+    {
+      "name": "oj.judge.java",
+      "type": "org.example.judge.config.JudgeConfig$JavaConfig",
+      "sourceType": "org.example.judge.config.JudgeConfig",
+      "sourceMethod": "getJava()"
+    }
+  ],
+  "properties": [
+    {
+      "name": "jwt.expiration",
+      "type": "java.lang.Long",
+      "sourceType": "org.example.judge.config.JwtProperties"
+    },
+    {
+      "name": "jwt.secret",
+      "type": "java.lang.String",
+      "sourceType": "org.example.judge.config.JwtProperties"
+    },
+    {
+      "name": "oj.judge.java.max-cpu-time",
+      "type": "java.lang.Integer",
+      "sourceType": "org.example.judge.config.JudgeConfig$JavaConfig"
+    },
+    {
+      "name": "oj.judge.java.max-memory",
+      "type": "java.lang.Long",
+      "sourceType": "org.example.judge.config.JudgeConfig$JavaConfig"
+    },
+    {
+      "name": "oj.judge.java.max-real-time",
+      "type": "java.lang.Integer",
+      "sourceType": "org.example.judge.config.JudgeConfig$JavaConfig"
+    },
+    {
+      "name": "oj.judge.server-url",
+      "type": "java.lang.String",
+      "sourceType": "org.example.judge.config.JudgeConfig"
+    },
+    {
+      "name": "oj.judge.token",
+      "type": "java.lang.String",
+      "sourceType": "org.example.judge.config.JudgeConfig"
+    }
+  ],
+  "hints": []
+}

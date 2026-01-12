@@ -1,0 +1,136 @@
+version: "3.8"
+
+services:
+  # --- 基础中间件 ---
+
+  # Nacos 注册中心
+  oj-nacos:
+    image: nacos/nacos-server:v2.2.3
+    container_name: oj-nacos
+    environment:
+      - MODE=standalone
+      - JVM_XMS=256m
+      - JVM_XMX=256m
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    restart: always
+
+  # MySQL 数据库
+  oj-mysql:
+    image: mysql:8.0
+    container_name: oj-mysql
+    restart: always
+    environment:
+      - MYSQL_DATABASE=sit_oj
+      - MYSQL_ROOT_PASSWORD=13575877459hhh
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+  # --- 判题系统核心 ---
+
+  # 青岛OJ 判题机 (Judge Server)
+  oj-judge-server:
+    image: registry.cn-hongkong.aliyuncs.com/oj-image/judge:1.6.1
+    container_name: oj-judge-server
+    restart: always
+    read_only: true
+    cap_drop:
+      - SETPCAP
+      - MKNOD
+      - NET_BIND_SERVICE
+      - SYS_CHROOT
+      - SETFCAP
+      - FSETID
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./data/test_case:/test_case:ro  # 与 problem 服务共享测试用例目录
+      - ./data/judge_server/log:/log
+      - ./data/judge_server/run:/judger
+    environment:
+      - SERVICE_URL=http://oj-judge-server:8080
+      - BACKEND_URL=http://oj-gateway:8001/judge/judge_server_heartbeat/
+      - TOKEN=SIT_OJ_JUDGE_TOKEN_2026 # 必须与 judge 模块 yml 一致
+      - judger_debug=1
+    ports:
+      - "8080:8080"
+
+  # --- 你的微服务模块 ---
+
+  # 1. 网关入口
+  oj-gateway:
+    build: ./gateway
+    container_name: oj-gateway
+    ports:
+      - "8001:8001"
+    depends_on:
+      - oj-nacos
+    environment:
+      - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
+    restart: always
+
+  # 2. 用户服务
+  oj-user:
+    build: ./user-service
+    container_name: oj-user
+    depends_on:
+      - oj-nacos
+      - oj-mysql
+    environment:
+      - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
+      - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false
+    restart: always
+
+  # 3. 题目服务
+  oj-problem:
+    build: ./problem-service
+    container_name: oj-problem
+    depends_on:
+      - oj-nacos
+      - oj-mysql
+    volumes:
+      - ./data/test_case:/data/test_case # 物理路径必须与判题机一致
+    environment:
+      - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
+      - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false
+      - OJ_TESTCASE_ENABLE_REMOTE_SYNC=false
+    restart: always
+
+  # 4. 提交服务
+  oj-submission:
+    build: ./submission-service
+    container_name: oj-submission
+    depends_on:
+      - oj-nacos
+      - oj-mysql
+    environment:
+      - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
+      - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false
+    restart: always
+
+  # 5. 判题业务逻辑模块 (调用判题机的微服务)
+  oj-judge-logic:
+    build: ./judge-service
+    container_name: oj-judge-logic
+    depends_on:
+      - oj-nacos
+      - oj-judge-server
+    environment:
+      - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
+      - OJ_JUDGE_SERVER_URL=http://oj-judge-server:8080
+      - OJ_JUDGE_TOKEN=SIT_OJ_JUDGE_TOKEN_2026
+    restart: always
+
+  # --- 前端服务 ---
+  oj-frontend:
+    image: nginx:alpine
+    container_name: oj-frontend
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf
+    restart: always

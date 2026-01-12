@@ -1,0 +1,29 @@
+package org.example.competition.service;
+
+import com.baomidou.mybatisplus.extension.service.IService;
+import org.example.common.utils.Result;
+import org.example.competition.entity.Competition;
+import org.example.competition.entity.Participation;
+
+import java.util.List;
+import java.util.Map;
+
+public interface CompetitionService extends IService<Competition> {
+    // 获取比赛详情（包含关联题目和用户状态）
+    Competition getCompetitionDetail(Integer competitionId, Integer userId);
+
+    // 获取排名列表
+    List<Participation> getRanklist(Integer competitionId);
+
+    // 核心：处理比赛提交后的数据更新（由判题服务回调）
+    void updateAcmStats(Integer userId, Integer competitionId, Integer problemId, String status);
+
+    Result handleSubmission(Integer userId, Integer competitionId, Integer problemId, String code, String language);
+
+    boolean addProblems(Integer competitionId, List<Integer> problemIds);
+
+    Result<Map<String, Object>> getProblemStats(Integer competitionId);
+
+    List<Competition> getListWithRegisterStatus(Integer userId);
+
+}
