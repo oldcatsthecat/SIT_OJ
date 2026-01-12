@@ -4,7 +4,7 @@
 sudo apt update
 sudo apt install -y openjdk-17-jdk
 sudo apt install -y maven
-git clone https://github.com/your-username/SIT_OJ.git
+git clone https://github.com/oldcatsthecat/SIT_OJ.git
 cd SIT_OJ
 chmod +x deploy.sh
 ./deploy.sh
