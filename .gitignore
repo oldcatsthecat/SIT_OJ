@@ -1,22 +1,10 @@
-# --- 后端相关 ---
-**/target/          # 忽略所有模块编译产生的 target 文件夹
-*.jar               # 忽略所有打包出来的 jar 文件
-*.war               # 忽略 war 包
+# 忽略所有 IDE 配置文件
+.idea/
+*.iml
 
-# --- 前端相关 ---
-**/node_modules/    # 忽略前端极其庞大的依赖库
-**/dist/            # 忽略前端打包生成的静态文件
+# 忽略后端编译文件
+**/target/
 
-# --- IDE/编辑器相关 ---
-.idea/              # 忽略 IDEA 的配置文件夹
-*.iml               # 忽略你刚才问到的 iml 配置文件
-.vscode/            # 忽略 VS Code 配置
-*.suo
-*.ntvs*
-*.njsproj
-
-.DS_Store           # 忽略 macOS 临时文件
-Thumbs.db           # 忽略 Windows 缩略图缓存
-*.log               # 忽略生成的日志文件
-
-.env                # 忽略本地环境变量文件（防止泄露数据库密码）
+# 忽略前端依赖
+**/node_modules/
+dist/

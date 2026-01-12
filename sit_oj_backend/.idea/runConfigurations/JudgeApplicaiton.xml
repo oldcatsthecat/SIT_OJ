@@ -1,9 +1,0 @@
-<component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="JudgeApplicaiton" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
-    <module name="judge" />
-    <option name="SPRING_BOOT_MAIN_CLASS" value="org.example.judge.JudgeApplication" />
-    <method v="2">
-      <option name="Make" enabled="true" />
-    </method>
-  </configuration>
-</component>
