@@ -8,6 +8,10 @@ git clone https://github.com/oldcatsthecat/SIT_OJ.git
 cd SIT_OJ
 chmod +x deploy.sh
 ./deploy.sh
+
+
+# 以后只用这个命令，不要带横杠
+docker compose up -d --build
 ```
 ## hint
 暂时什么也没有，希望能做大做强--SIT算法竞赛社特供版，judgeServer用的是QingDaoOj的测评机后端，还没重写
