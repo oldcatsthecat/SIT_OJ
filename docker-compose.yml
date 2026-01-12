@@ -145,8 +145,8 @@ services:
       - "80:80"
     volumes:
       # 路径修正：匹配你截图中的文件夹名称
-      - ./sit_oj_frontend/dist:/usr/share/nginx/html:ro
-      - ./sit_oj_frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./sit_oj_backend/frontend/dist:/usr/share/nginx/html:ro
+      - ./sit_oj_backend/frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - oj-gateway
     restart: always
