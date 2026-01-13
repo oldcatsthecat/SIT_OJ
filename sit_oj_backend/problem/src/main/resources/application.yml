@@ -34,7 +34,7 @@ oj:
     remote-password: 13575877459hhH
     # 本地存储配置
     local-base-path: ../data/test_case
-    enable-remote-sync: true  # 开发环境下设为 true，部署到服务器设为 false
+    enable-remote-sync: false  # 开发环境下设为 true，部署到服务器设为 false
 
 jwt:
   # 必须至少 32 个字符，确保 HS256 算法安全
