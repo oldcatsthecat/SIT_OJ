@@ -10,3 +10,9 @@
 
 # 忽略前端依赖
 **/node_modules/
+
+# 忽略 test_case 文件夹下的所有文件
+data/test_case/*
+
+# 唯独排除 .gitkeep 文件，使其能被 Git 追踪
+!data/test_case/.gitkeep
