@@ -1,7 +1,7 @@
 version: "3.8"
 
 services:
-  # Nacos: 注册中心 (优化 JVM 内存分配)
+  # Nacos: 注册中心
   oj-nacos:
     image: nacos/nacos-server:v2.2.3
     container_name: oj-nacos
@@ -26,8 +26,9 @@ services:
       resources:
         limits:
           memory: 768M
+          cpus: '0.5' # 注册中心不需要太多性能，但不能断供
 
-  # MySQL: 数据库 (增加 Buffer Pool 提高性能)
+  # MySQL: 数据库
   oj-mysql:
     image: mysql:8.0
     container_name: oj-mysql
@@ -54,8 +55,9 @@ services:
       resources:
         limits:
           memory: 512M
+          cpus: '1.0' # 保证数据库读写有足够的响应能力
 
-  # 判题服务器 (底层服务)
+  # 判题服务器 (核心限制点：防止 CPU 100% 导致系统假死)
   oj-judge-server:
     image: registry.cn-hongkong.aliyuncs.com/oj-image/judge:1.6.1
     container_name: oj-judge-server
@@ -76,8 +78,9 @@ services:
       resources:
         limits:
           memory: 384M
+          cpus: '2.0' # 核心设置：4核服务器最多给判题机2核，留出2核给业务和系统
 
-  # --- 微服务模块 (核心逻辑，增加 Xmx 堆内存防止频繁 GC) ---
+  # --- 微服务模块 ---
 
   oj-gateway:
     build: ./sit_oj_backend/gateway
@@ -98,6 +101,7 @@ services:
       resources:
         limits:
           memory: 320M
+          cpus: '0.5' # 保证网关不会因为判题太猛而 504
 
   oj-user:
     build: ./sit_oj_backend/user
@@ -120,6 +124,7 @@ services:
       resources:
         limits:
           memory: 512M
+          cpus: '0.5'
 
   oj-problem:
     build: ./sit_oj_backend/problem
@@ -138,12 +143,13 @@ services:
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
       - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
-      - OJ_TESTCASE_ENABLE_REMOTE_SYNC=false  # 显式覆盖
+      - OJ_TESTCASE_ENABLE_REMOTE_SYNC=false
     restart: always
     deploy:
       resources:
         limits:
           memory: 512M
+          cpus: '0.5'
 
   oj-submission:
     build: ./sit_oj_backend/submission
@@ -165,6 +171,7 @@ services:
       resources:
         limits:
           memory: 384M
+          cpus: '0.5'
 
   oj-competition:
     build: ./sit_oj_backend/competition
@@ -186,6 +193,7 @@ services:
       resources:
         limits:
           memory: 384M
+          cpus: '0.5'
 
   oj-judge-logic:
     build: ./sit_oj_backend/judge
@@ -209,8 +217,9 @@ services:
       resources:
         limits:
           memory: 384M
+          cpus: '0.5'
 
-  # 前端服务 (调高内存限制至 128M)
+  # 前端服务
   oj-frontend:
     image: nginx:alpine
     container_name: oj-frontend
@@ -228,6 +237,7 @@ services:
       resources:
         limits:
           memory: 128M
+          cpus: '0.2'
 
 networks:
   oj-net:
