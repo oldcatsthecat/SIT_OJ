@@ -10,8 +10,10 @@ public class AdminInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         // 从 Request 属性中获取 LoginInterceptor 解析出的角色
-        String role = (String) request.getAttribute("userRole");
 
+
+        String role = (String) request.getAttribute("userRole");
+        System.out.println(">>> 拦截器触发，请求路径: " + request.getRequestURI() + role);
         if ("ADMIN".equalsIgnoreCase(role)) {
             return true;
         }

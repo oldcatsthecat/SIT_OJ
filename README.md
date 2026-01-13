@@ -1,5 +1,7 @@
 # SIT-OJ
 ## 部署
+建议配置
+运行内存4GB及以上
 安装依赖
 ```
 sudo apt update && sudo apt-get install -y vim python3-pip curl git
