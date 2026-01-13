@@ -1,7 +1,7 @@
 version: "3.8"
 
 services:
-  # Nacos: 注册中心 (内存限制与 JVM 调优)
+  # Nacos: 注册中心
   oj-nacos:
     image: nacos/nacos-server:v2.2.3
     container_name: oj-nacos
@@ -15,7 +15,7 @@ services:
       - NACOS_AUTH_ENABLE=false
     ports:
       - "8848:8848"
-      - "9848:9848" # Nacos 2.x 必须
+      - "9848:9848"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/index.html"]
       interval: 10s
@@ -27,7 +27,7 @@ services:
         limits:
           memory: 512M
 
-  # MySQL: 数据库 (压减 Buffer Pool 和 禁用性能统计)
+  # MySQL: 数据库
   oj-mysql:
     image: mysql:8.0
     container_name: oj-mysql
@@ -55,7 +55,7 @@ services:
         limits:
           memory: 192M
 
-  # 判题服务器 (Go/C++ 底层服务)
+  # 判题服务器
   oj-judge-server:
     image: registry.cn-hongkong.aliyuncs.com/oj-image/judge:1.6.1
     container_name: oj-judge-server
@@ -77,8 +77,6 @@ services:
         limits:
           memory: 256M
 
-  # --- 微服务模块 (统一优化 JVM 参数) ---
-
   oj-gateway:
     build: ./sit_oj_backend/gateway
     container_name: oj-gateway
@@ -92,6 +90,8 @@ services:
     environment:
       - JAVA_OPTS=-Xms64m -Xmx128m -XX:MaxDirectMemorySize=16m -XX:+UseSerialGC -Xss256k
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
+      # 统一 JWT 密钥
+      - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
     restart: always
     deploy:
       resources:
@@ -112,6 +112,9 @@ services:
       - JAVA_OPTS=-Xms64m -Xmx128m -XX:+UseSerialGC -Xss256k
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      # 统一 JWT 配置
+      - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
+      - JWT_EXPIRATION=86400000
     restart: always
     deploy:
       resources:
@@ -134,6 +137,7 @@ services:
       - JAVA_OPTS=-Xms64m -Xmx128m -XX:+UseSerialGC -Xss256k
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
     restart: always
     deploy:
       resources:
@@ -154,13 +158,13 @@ services:
       - JAVA_OPTS=-Xms64m -Xmx128m -XX:+UseSerialGC -Xss256k
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
     restart: always
     deploy:
       resources:
         limits:
           memory: 200M
 
-  # 新增：比赛微服务
   oj-competition:
     build: ./sit_oj_backend/competition
     container_name: oj-competition
@@ -175,6 +179,7 @@ services:
       - JAVA_OPTS=-Xms64m -Xmx128m -XX:+UseSerialGC -Xss256k
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
     restart: always
     deploy:
       resources:
@@ -196,13 +201,15 @@ services:
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
       - OJ_JUDGE_SERVER_URL=http://oj-judge-server:8080
       - OJ_JUDGE_TOKEN=SIT_OJ_JUDGE_TOKEN_2026
+      # 强制统一 JWT 配置，确保能解析 user 签发的 token
+      - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
+      - JWT_EXPIRATION=86400000
     restart: always
     deploy:
       resources:
         limits:
           memory: 200M
 
-  # 前端服务
   oj-frontend:
     image: nginx:alpine
     container_name: oj-frontend
