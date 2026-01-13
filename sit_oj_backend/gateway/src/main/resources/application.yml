@@ -27,6 +27,12 @@ spring:
           predicates:
             - Path=/problems/**, /api/admin/problems/**
 
+        # 新增判题管理路由
+        - id: judge-admin
+          uri: lb://judge  # 对应 oj-judge-logic 在 Nacos 里的服务名
+          predicates:
+            - Path=/api/admin/judge/**
+
         - id: judge
           uri: lb://judge
           predicates:

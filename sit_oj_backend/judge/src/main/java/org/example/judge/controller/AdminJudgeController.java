@@ -14,7 +14,7 @@ public class AdminJudgeController {
 
     //后续如果需要负载均衡，多个判题机，可以考虑修改这里，
     //防止判题机以为我们后端挂了然后一直重启，给他一个心跳地址
-    @PostMapping("/judge_server_heartbeat/")
+    @PostMapping("/judge_server_heartbeat")
     public Map<String, Object> handleHeartbeat(@RequestBody Map<String, Object> payload) {
         // 每次心跳，把最新的 CPU、内存、最后在线时间存起来
         payload.put("last_seen", System.currentTimeMillis());

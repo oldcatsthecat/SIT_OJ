@@ -68,7 +68,7 @@ services:
       - ./data/judge_server/run:/judger
     environment:
       - SERVICE_URL=http://oj-judge-server:8080
-      - BACKEND_URL=http://oj-gateway:8001/judge/judge_server_heartbeat/
+      - BACKEND_URL=http://oj-gateway:8001/api/admin/judge/judge_server_heartbeat/
       - TOKEN=SIT_OJ_JUDGE_TOKEN_2026
     deploy:
       resources:
