@@ -7,7 +7,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/admin/judge")
+@RequestMapping("/admin/judge")
 public class AdminJudgeController {
 
     public static Map<String, Object> lastStatus = new HashMap<>();

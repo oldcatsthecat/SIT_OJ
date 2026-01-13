@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/admin/users") // 统一加上 admin 前缀，明确这是管理端接口
+@RequestMapping("/admin/users") // 统一加上 admin 前缀，明确这是管理端接口
 public class AdminUserController {
 
     @Autowired

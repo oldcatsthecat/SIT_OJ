@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/admin/competitions")
+@RequestMapping("/admin/competitions")
 public class AdminCompetitionController {
 
     @Autowired
@@ -19,7 +19,7 @@ public class AdminCompetitionController {
 
     /**
      * 创建比赛
-     * URL: POST /api/admin/competitions/create
+     * URL: POST /admin/competitions/create
      */
     @PostMapping("/create")
     public Result createCompetition(@RequestBody Competition competition) {
@@ -30,7 +30,7 @@ public class AdminCompetitionController {
 
     /**
      * 为比赛批量添加题目
-     * URL: POST /api/admin/competitions/problems/add
+     * URL: POST /admin/competitions/problems/add
      */
     @PostMapping("/problems/add")
     public Result addProblemsToCompetition(@RequestBody Map<String, Object> data) {

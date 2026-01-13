@@ -9,6 +9,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 public interface UserFeignClient {
 
 
-    @GetMapping("/api/users/inner/{id}")
+    @GetMapping("/users/inner/{id}")
     java.util.Map<String, Object> getUserById(@PathVariable("id") Integer id);
 }

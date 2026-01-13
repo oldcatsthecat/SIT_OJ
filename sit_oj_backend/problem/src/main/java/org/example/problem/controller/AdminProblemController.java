@@ -11,7 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/admin/problems")
+@RequestMapping("/admin/problems")
 public class AdminProblemController {
 
     @Autowired

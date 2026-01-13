@@ -25,13 +25,13 @@ spring:
         - id: problem
           uri: lb://problem # lb 代表负载均衡，后面跟 Nacos 中的服务名
           predicates:
-            - Path=/problems/**, /api/admin/problems/**
+            - Path=/problems/**, /admin/problems/**
 
         # 新增判题管理路由
         - id: judge-admin
           uri: lb://judge  # 对应 oj-judge-logic 在 Nacos 里的服务名
           predicates:
-            - Path=/api/admin/judge/**
+            - Path=/admin/judge/**
 
         - id: judge
           uri: lb://judge
@@ -46,12 +46,12 @@ spring:
         - id: competition
           uri: lb://competition # 对应比赛服务的 application.name
           predicates:
-            - Path=/competitions/**, /api/admin/competitions/**, /api/admin/problems/**
+            - Path=/competitions/**, /admin/competitions/**, /admin/problems/**
 
         - id: user
           uri: lb://user # 使用负载均衡指向 Nacos 注册的服务
           predicates:
-            - Path=/api/**
+            - Path=/users/**,/admin/**
 
       # 全局跨域配置 (让前端 5173 能够访问网关)
       globalcors:
