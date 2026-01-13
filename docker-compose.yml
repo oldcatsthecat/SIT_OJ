@@ -1,7 +1,7 @@
 version: "3.8"
 
 services:
-  # Nacos: 注册中心
+  # Nacos: 注册中心 (优化 JVM 内存分配)
   oj-nacos:
     image: nacos/nacos-server:v2.2.3
     container_name: oj-nacos
@@ -9,9 +9,9 @@ services:
       - oj-net
     environment:
       - MODE=standalone
-      - JVM_XMS=128m
-      - JVM_XMX=256m
-      - JVM_XMN=64m
+      - JVM_XMS=256m
+      - JVM_XMX=512m
+      - JVM_XMN=128m
       - NACOS_AUTH_ENABLE=false
     ports:
       - "8848:8848"
@@ -25,9 +25,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 768M
 
-  # MySQL: 数据库
+  # MySQL: 数据库 (增加 Buffer Pool 提高性能)
   oj-mysql:
     image: mysql:8.0
     container_name: oj-mysql
@@ -47,15 +47,15 @@ services:
       timeout: 5s
       retries: 5
     command:
-      - --innodb_buffer_pool_size=32M
+      - --innodb_buffer_pool_size=256M
       - --performance_schema=OFF
-      - --max_connections=150
+      - --max_connections=200
     deploy:
       resources:
         limits:
-          memory: 192M
+          memory: 512M
 
-  # 判题服务器
+  # 判题服务器 (底层服务)
   oj-judge-server:
     image: registry.cn-hongkong.aliyuncs.com/oj-image/judge:1.6.1
     container_name: oj-judge-server
@@ -75,7 +75,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
+
+  # --- 微服务模块 (核心逻辑，增加 Xmx 堆内存防止频繁 GC) ---
 
   oj-gateway:
     build: ./sit_oj_backend/gateway
@@ -88,15 +90,14 @@ services:
       oj-nacos:
         condition: service_healthy
     environment:
-      - JAVA_OPTS=-Xms64m -Xmx128m -XX:MaxDirectMemorySize=16m -XX:+UseSerialGC -Xss256k
+      - JAVA_OPTS=-Xms128m -Xmx256m -XX:MaxDirectMemorySize=64m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
-      # 统一 JWT 密钥
       - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
     restart: always
     deploy:
       resources:
         limits:
-          memory: 200M
+          memory: 320M
 
   oj-user:
     build: ./sit_oj_backend/user
@@ -109,17 +110,16 @@ services:
       oj-nacos:
         condition: service_healthy
     environment:
-      - JAVA_OPTS=-Xms64m -Xmx128m -XX:+UseSerialGC -Xss256k
+      - JAVA_OPTS=-Xms256m -Xmx384m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-      # 统一 JWT 配置
       - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
       - JWT_EXPIRATION=86400000
     restart: always
     deploy:
       resources:
         limits:
-          memory: 200M
+          memory: 512M
 
   oj-problem:
     build: ./sit_oj_backend/problem
@@ -134,7 +134,7 @@ services:
     volumes:
       - ./data/test_case:/data/test_case
     environment:
-      - JAVA_OPTS=-Xms64m -Xmx128m -XX:+UseSerialGC -Xss256k
+      - JAVA_OPTS=-Xms256m -Xmx384m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
       - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
@@ -142,7 +142,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 200M
+          memory: 512M
 
   oj-submission:
     build: ./sit_oj_backend/submission
@@ -155,7 +155,7 @@ services:
       oj-nacos:
         condition: service_healthy
     environment:
-      - JAVA_OPTS=-Xms64m -Xmx128m -XX:+UseSerialGC -Xss256k
+      - JAVA_OPTS=-Xms192m -Xmx256m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
       - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
@@ -163,7 +163,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 200M
+          memory: 384M
 
   oj-competition:
     build: ./sit_oj_backend/competition
@@ -176,7 +176,7 @@ services:
       oj-nacos:
         condition: service_healthy
     environment:
-      - JAVA_OPTS=-Xms64m -Xmx128m -XX:+UseSerialGC -Xss256k
+      - JAVA_OPTS=-Xms192m -Xmx256m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
       - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
@@ -184,7 +184,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 200M
+          memory: 384M
 
   oj-judge-logic:
     build: ./sit_oj_backend/judge
@@ -197,19 +197,19 @@ services:
       oj-judge-server:
         condition: service_started
     environment:
-      - JAVA_OPTS=-Xms64m -Xmx128m -XX:+UseSerialGC -Xss256k
+      - JAVA_OPTS=-Xms128m -Xmx256m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
       - OJ_JUDGE_SERVER_URL=http://oj-judge-server:8080
       - OJ_JUDGE_TOKEN=SIT_OJ_JUDGE_TOKEN_2026
-      # 强制统一 JWT 配置，确保能解析 user 签发的 token
       - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
       - JWT_EXPIRATION=86400000
     restart: always
     deploy:
       resources:
         limits:
-          memory: 200M
+          memory: 384M
 
+  # 前端服务 (调高内存限制至 128M)
   oj-frontend:
     image: nginx:alpine
     container_name: oj-frontend
@@ -226,7 +226,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 64M
+          memory: 128M
 
 networks:
   oj-net:

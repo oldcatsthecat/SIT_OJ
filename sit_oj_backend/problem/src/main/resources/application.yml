@@ -11,8 +11,8 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   servlet:
     multipart:
-      max-file-size: 10MB       # 单个文件最大限制
-      max-request-size: 10MB    # 单次请求总数据大小限制
+      max-file-size: 50MB       # 单个文件最大限制
+      max-request-size: 50MB    # 单次请求总数据大小限制
 
   cloud:
     nacos:
