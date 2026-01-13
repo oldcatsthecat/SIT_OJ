@@ -103,6 +103,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         String email = (String) params.get("email");
         String code = (String) params.get("code");
 
+        String realName = (String) params.get("realName");
+        String studentId = (String) params.get("studentId");
+        String gender = (String) params.get("gender");
+        Integer age = (Integer) params.get("age"); // 注意前端传的是数字
+
         // 2. 查找预存记录
         User user = this.getOne(new LambdaQueryWrapper<User>().eq(User::getEmail, email));
         if (user == null) {
@@ -131,6 +136,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 .set(User::getUsername, username)
                 .set(User::getPassword, passwordEncoder.encode(password))
                 .set(User::getRole, "USER")
+                .set(User::getRealName, realName)
+                .set(User::getStudentId, studentId)
+                .set(User::getGender, gender)
+                .set(User::getAge, age)
                 .set(User::getEmailCode, null)         // 强制更新为 null
                 .set(User::getCodeExpireTime, null)    // 强制更新为 null
         );

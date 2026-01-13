@@ -48,7 +48,14 @@ chmod +x deploy.sh
 ./deploy.sh
 ```
 
-
+克隆并合并（防止克隆失效）
+```
+cd SIT_OJ
+ls | grep -v "^data$" | xargs rm -rf
+git clone https://github.com/oldcatsthecat/SIT_OJ.git ../SIT_OJ_TMP
+rsync -av --ignore-existing --exclude='.git' ../SIT_OJ_TMP/ ./
+rm -rf ../SIT_OJ_TMP
+```
 
 # 以后只用这个命令，不要带横杠
 docker compose up -d --build
