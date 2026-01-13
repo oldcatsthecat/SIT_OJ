@@ -2,17 +2,23 @@ package org.example.judge.interceptor;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.example.judge.utils.JwtUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 @Component
 public class AdminInterceptor implements HandlerInterceptor {
+
+    @Autowired
+    private JwtUtils jwtUtils;
+
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         // 从 Request 属性中获取 LoginInterceptor 解析出的角色
 
         String token = request.getHeader("Authorization");
-        String role = JwtUtils.getRoleFromToken(token); // 解析 Token
+        String role = jwtUtils.getRoleFromToken(token); // 解析 Token
 
         if ("ADMIN".equalsIgnoreCase(role)) {
             return true;
