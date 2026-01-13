@@ -105,7 +105,7 @@ public class TestCaseServiceImpl implements TestCaseService {
         String jsonInfo = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(info);
         Files.write(problemPath.resolve("info"), jsonInfo.getBytes(StandardCharsets.UTF_8));
 
-        syncToRemote(problemPath, problemId);
+        //syncToRemote(problemPath, problemId);
     }
 
     private void syncToRemote(Path localPath, String problemId) throws IOException {

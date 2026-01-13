@@ -138,6 +138,7 @@ services:
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
       - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
+      - OJ_TESTCASE_ENABLE_REMOTE_SYNC=false  # 显式覆盖
     restart: always
     deploy:
       resources:
