@@ -49,7 +49,7 @@ services:
     command:
       - --innodb_buffer_pool_size=32M
       - --performance_schema=OFF
-      - --max_connections=15
+      - --max_connections=150
     deploy:
       resources:
         limits:
