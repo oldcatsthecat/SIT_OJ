@@ -18,5 +18,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
         // 管理员权限拦截（仅限管理员路径）
         registry.addInterceptor(adminInterceptor)
                 .addPathPatterns("/api/admin/**"); // 确保你的 AdminUserController 路径匹配
+        .excludePathPatterns("/api/admin/judge/judge_server_heartbeat");
     }
 }

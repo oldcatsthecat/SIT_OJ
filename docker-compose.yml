@@ -9,9 +9,9 @@ services:
       - oj-net
     environment:
       - MODE=standalone
-      - JVM_XMS=128m
-      - JVM_XMX=384m
-      - JVM_XMN=64m
+      - JVM_XMS=256m
+      - JVM_XMX=512m   # JVM 堆内存限制
+      - JVM_XMN=128m
     ports:
       - "8848:8848"
     healthcheck:
@@ -23,7 +23,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1024M
 
   # MySQL: 数据库 (进一步压减缓存)
   oj-mysql:
