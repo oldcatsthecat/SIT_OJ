@@ -19,11 +19,11 @@ public class WebMvcConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         // 第一层：通用登录拦截（所有需要登录的接口）
         registry.addInterceptor(loginInterceptor)
-                .addPathPatterns("/api/**")
-                .excludePathPatterns("/api/users/login", "/api/users/register");
+                .addPathPatterns("/users/**","/admin/**")
+                .excludePathPatterns("/users/login", "/users/register");
 
         // 第二层：管理员权限拦截（仅限管理员路径）
         registry.addInterceptor(adminInterceptor)
-                .addPathPatterns("/api/admin/**"); // 确保你的 AdminUserController 路径匹配
+                .addPathPatterns("/admin/**"); // 确保你的 AdminUserController 路径匹配
     }
 }
