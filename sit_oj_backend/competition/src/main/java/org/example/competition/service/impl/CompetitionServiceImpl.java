@@ -120,7 +120,6 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         submissionParams.put("codeContent", code);
         submissionParams.put("language", language);
         // 建议传递 LocalDateTime 对象，由序列化器处理格式
-        submissionParams.put("submissionTime", now);
 
         try {
             // 3. 核心改变：调用判题服务进入队列，立即返回凭证

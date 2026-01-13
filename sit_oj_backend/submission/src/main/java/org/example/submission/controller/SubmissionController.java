@@ -11,6 +11,7 @@ import org.example.submission.service.SubmissionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,16 +31,17 @@ public class SubmissionController {
     @PostMapping("/submit")
     public Result doSubmit(@RequestBody Submission submission, HttpServletRequest request) {
         // 1. 安全性检查：从 Token 获取真实用户 ID，防止前端伪造
-        Integer loginUserId = submissionService.getUserIdFromToken(request.getHeader("Authorization"));
-        if (loginUserId == null) {
-            return Result.error("登录已过期，请重新登录");
+        if (submission.getUserId() == null) {
+            Integer loginUserId = submissionService.getUserIdFromToken(request.getHeader("Authorization"));
+            if (loginUserId == null) return Result.error("登录过期");
+            submission.setUserId(loginUserId);
         }
 
-        // 强制将提交记录关联到当前登录用户
-        submission.setUserId(loginUserId);
-
+        LocalDateTime now = LocalDateTime.now();
+        submission.setSubmissionTime(now);
         // 2. 调用 Service 执行判题逻辑
         Submission result = submissionService.handleSubmission(submission);
+
 
         return Result.success(result);
     }
