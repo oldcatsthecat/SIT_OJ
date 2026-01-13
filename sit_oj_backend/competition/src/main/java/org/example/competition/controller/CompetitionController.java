@@ -81,7 +81,7 @@ public class CompetitionController {
             return competitionService.handleSubmission(userId, competitionId, problemId, code, language);
 
         } catch (Exception e) {
-            return Result.error("提交数据格式错误，请检查题目ID等参数");
+            return Result.error("提交数据格式错误，请检查题目ID等参数" + e.getMessage());
         }
     }
 
