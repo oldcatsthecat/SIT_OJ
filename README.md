@@ -57,8 +57,11 @@ rsync -av --ignore-existing --exclude='.git' ../SIT_OJ_TMP/ ./
 rm -rf ../SIT_OJ_TMP
 ```
 
-# 以后只用这个命令，不要带横杠
+# 注意docker compose部署只用这个命令，不要带横杠
+```
 docker compose up -d --build
+```
+
 
 ## hint
 ```
