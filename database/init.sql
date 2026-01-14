@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS problems (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB;
 
--- 4. 提交记录表 (已修正：全级联删除)
+-- 4. 提交记录表
 CREATE TABLE IF NOT EXISTS submissions (
                                            submission_id INT PRIMARY KEY AUTO_INCREMENT,
                                            user_id INT NOT NULL,
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS submissions (
     CONSTRAINT fk_sub_contest FOREIGN KEY (competition_id) REFERENCES competitions(competition_id) ON DELETE CASCADE
     ) ENGINE=InnoDB;
 
--- 5. 比赛题目关联表 (维持级联删除)
+-- 5. 比赛题目关联表
 CREATE TABLE IF NOT EXISTS competition_problems (
                                                     competition_id INT NOT NULL,
                                                     problem_id INT NOT NULL,
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS competition_problems (
     CONSTRAINT fk_cp_problem FOREIGN KEY (problem_id) REFERENCES problems(problem_id) ON DELETE CASCADE
     ) ENGINE=InnoDB;
 
--- 6. 参赛表 (维持级联删除)
+-- 6. 参赛表
 CREATE TABLE IF NOT EXISTS participations (
                                               user_id INT NOT NULL,
                                               competition_id INT NOT NULL,
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS participations (
     CONSTRAINT fk_part_contest FOREIGN KEY (competition_id) REFERENCES competitions(competition_id) ON DELETE CASCADE
     ) ENGINE=InnoDB;
 
--- 7. 比赛提交统计表 (核心修正点：之前缺失外键，现已添加级联删除)
+-- 7. 比赛提交统计表
 CREATE TABLE IF NOT EXISTS competition_submission_stats (
                                                             user_id INT NOT NULL,
                                                             competition_id INT NOT NULL,
@@ -106,12 +106,3 @@ CREATE TABLE IF NOT EXISTS competition_submission_stats (
     CONSTRAINT fk_stats_problem FOREIGN KEY (problem_id) REFERENCES problems(problem_id) ON DELETE CASCADE
     ) ENGINE=InnoDB;
 
--- 8. 审计日志表 (维持级联删除)
-CREATE TABLE IF NOT EXISTS audit_logs (
-                                          log_id INT PRIMARY KEY AUTO_INCREMENT,
-                                          admin_id INT,
-                                          operation VARCHAR(100),
-    target_id INT,
-    operation_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_audit_admin FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB;
