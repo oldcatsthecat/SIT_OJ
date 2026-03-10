@@ -51,11 +51,25 @@ public class AdminProblemController {
     }
 
     @PostMapping("/testcase/upload")
-    public Result upload(@RequestParam("file") MultipartFile file, String problemId) {
+    public Result upload(@RequestParam("file") MultipartFile file, @RequestParam("problemId") String problemId) {
         try {
-            testCaseService.processAndSync(file, problemId);
+            // 1. 根据 problemId 查询题目信息
+            Problem problem = problemService.getById(problemId);
+            if (problem == null) {
+                return Result.error("题目不存在");
+            }
+
+            // 2. 根据 judgeType 判断是否为 SPJ (0: 普通题, 1: SPJ/构造题)
+            // 也可以根据你的逻辑直接判断：boolean isSpj = problem.getJudgeType() != 0;
+            // 这里我们直接根据字段含义获取
+            boolean isSpj = (problem.getJudgeType() != null && problem.getJudgeType() != 0);
+
+            // 3. 调用 service 处理，并传入 spj 标识
+            testCaseService.processAndSync(file, problemId, isSpj);
+
             return Result.success();
         } catch (Exception e) {
+            e.printStackTrace(); // 建议加上堆栈打印方便在 docker logs 中排查
             return Result.error(e.getMessage());
         }
     }

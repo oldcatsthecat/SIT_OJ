@@ -33,11 +33,11 @@ public class TestCaseServiceImpl implements TestCaseService {
     private TestcaseConfig testcaseConfig;
 
     @Override
-    public void processAndSync(MultipartFile zipFile, String problemId) throws Exception {
+    public void processAndSync(MultipartFile zipFile, String problemId, boolean spj) throws Exception {
         Path localBase = Paths.get(testcaseConfig.getLocalBasePath());
         Path problemPath = localBase.resolve(problemId).normalize();
 
-        // 1. 彻底清理旧目录，防止 baseName 冲突或残留
+        // 1. 彻底清理旧目录
         if (Files.exists(problemPath)) {
             try (Stream<Path> walk = Files.walk(problemPath)) {
                 walk.sorted(Comparator.reverseOrder())
@@ -47,12 +47,11 @@ public class TestCaseServiceImpl implements TestCaseService {
         }
         Files.createDirectories(problemPath);
 
-        // 2. 平铺解压：不管压缩包里有没有文件夹，全部解压到 problemPath 根下
+        // 2. 平铺解压
         try (ZipInputStream zis = new ZipInputStream(zipFile.getInputStream())) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
                 if (entry.isDirectory()) continue;
-                // 只取文件名部分，去除路径
                 String fileName = Paths.get(entry.getName()).getFileName().toString();
                 Path filePath = problemPath.resolve(fileName);
                 Files.copy(zis, filePath, StandardCopyOption.REPLACE_EXISTING);
@@ -61,7 +60,9 @@ public class TestCaseServiceImpl implements TestCaseService {
         }
 
         TestCaseInfo info = new TestCaseInfo();
-        // 使用 TreeMap 配合自定义排序，让 info 里的测试点按 1, 2, 3... 顺序排列
+        // 设置 spj 标识
+        info.setSpj(spj);
+
         Map<String, TestCaseDetail> detailMap = new TreeMap<>((a, b) -> {
             try {
                 return Integer.compare(Integer.parseInt(a), Integer.parseInt(b));
@@ -77,19 +78,25 @@ public class TestCaseServiceImpl implements TestCaseService {
                 String baseName = inFileName.substring(0, inFileName.lastIndexOf(".in"));
                 Path outPath = problemPath.resolve(baseName + ".out");
 
-                if (Files.exists(outPath)) {
+                // --- 新增逻辑：对于 spj = true，仅设置 input 字段 ---
+                if (spj) {
+                    TestCaseDetail detail = new TestCaseDetail();
+                    detail.setInput_name(inFileName);
+                    detail.setInput_size(Files.size(inPath));
+                    detailMap.put(baseName, detail);
+                    System.out.println("[READY] SPJ Point: " + baseName);
+                }
+                // --- 原始逻辑：普通题目依然要求存在 .out ---
+                else if (Files.exists(outPath)) {
                     TestCaseDetail detail = new TestCaseDetail();
                     detail.setInput_name(inFileName);
                     detail.setOutput_name(baseName + ".out");
                     detail.setInput_size(Files.size(inPath));
 
-                    // --- 标准化核心逻辑 ---
                     String rawContent = Files.readString(outPath, StandardCharsets.UTF_8);
-                    // 统一换行符并保留唯一的一个末尾换行
-                    String normalized = rawContent.replace("\r\n", "\n").replace("\r", "\n").stripTrailing() ;
+                    String normalized = rawContent.replace("\r\n", "\n").replace("\r", "\n").stripTrailing();
                     byte[] finalBytes = normalized.getBytes(StandardCharsets.UTF_8);
 
-                    // 计算 MD5
                     String finalMd5 = DigestUtils.md5Hex(finalBytes);
                     detail.setStripped_output_md5(finalMd5);
                     detail.setOutput_size((long) finalBytes.length);
