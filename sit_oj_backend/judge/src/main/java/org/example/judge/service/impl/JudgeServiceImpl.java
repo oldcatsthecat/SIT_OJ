@@ -200,7 +200,18 @@ public class JudgeServiceImpl implements JudgeService {
         // 注意：spj_config 和 spj_compile_config 必须是对应的配置对象
         Map<String, Object> cppConfig = getDynamicLangConfig("C++", 256);
 
-        // 4. 构建请求 (注意 builder 里的方法名现在要跟下划线变量名一致)
+        Map<String, Object> spjRunConfig = new HashMap<>((Map<String, Object>) cppConfig.get("run"));
+        // 关键：补上判题机 SPJ 逻辑需要的 exe_name
+        spjRunConfig.put("exe_name", "spj");
+        // 建议：SPJ 的运行命令通常用这个模板
+        spjRunConfig.put("command", "{exe_path} {in_file_path} {user_out_file_path}");
+
+        // 3. 准备 spj_compile_config
+        Map<String, Object> spjCompileConfig = new HashMap<>((Map<String, Object>) cppConfig.get("compile"));
+        spjCompileConfig.put("src_name", "spj.cpp");
+        spjCompileConfig.put("exe_name", "spj"); // 这里的名字要和上面的 exe_name 一致
+
+        // 4. 构建请求
         JudgeServerRequestSpj request = JudgeServerRequestSpj.builder()
                 .src(code)
                 .spj_src(spj_src)
@@ -208,8 +219,8 @@ public class JudgeServiceImpl implements JudgeService {
                 .max_memory((int) finalMemory)
                 .language_config(langConfig)
                 .spj_version(spjVersion)
-                .spj_config(cppConfig.get("run"))     // 对应 run 节点
-                .spj_compile_config(cppConfig.get("compile")) // 对应 compile 节点
+                .spj_config(spjRunConfig)         // 使用补全后的配置
+                .spj_compile_config(spjCompileConfig) // 使用补全后的编译配置
                 .output(false)
                 .test_case_id(testCaseId)
                 .build();
