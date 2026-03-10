@@ -46,14 +46,14 @@ public class JudgeServiceImpl implements JudgeService {
             String language = (String) submission.get("language");
             Integer timeLimit = Integer.parseInt(String.valueOf(problem.get("timeLimit")));
             Integer memoryLimit = Integer.parseInt(String.valueOf(problem.get("memoryLimit")));
-            Integer judge_type = Integer.parseInt(String.valueOf(problem.get("judge_type")));
+            Integer judge_type = Integer.parseInt(String.valueOf(problem.get("judgeType")));
 
             // 3. 执行物理判题
             JudgeServerResponse<Object> body ;
             if(judge_type==0) body = sendToJudgeServer(code, language, String.valueOf(problemId), timeLimit, memoryLimit);
             else
             {
-                String spj_code = (String) problem.get("spj_code");
+                String spj_code = (String) problem.get("spjCode");
                 body = sendToJudgeServerSpj(code, language, timeLimit, memoryLimit,spj_code);
             }
             // 4. 解析判题机结果并转换 (逻辑下沉)
