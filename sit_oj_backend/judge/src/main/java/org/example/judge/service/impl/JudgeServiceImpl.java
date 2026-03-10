@@ -200,18 +200,18 @@ public class JudgeServiceImpl implements JudgeService {
         // 注意：spj_config 和 spj_compile_config 必须是对应的配置对象
         Map<String, Object> cppConfig = getDynamicLangConfig("C++", 256);
 
-        // 4. 构建请求
+        // 4. 构建请求 (注意 builder 里的方法名现在要跟下划线变量名一致)
         JudgeServerRequestSpj request = JudgeServerRequestSpj.builder()
                 .src(code)
-                .spjSrc(spj_src)          // 这里对应 DTO 里的 spjSrc 字段
-                .maxCpuTime(finalTime)     // 对应 maxCpuTime 字段
-                .maxMemory((int) finalMemory)
-                .languageConfig(langConfig)
-                .spjVersion(spjVersion)
-                .spjConfig(cppConfig.get("config"))
-                .spjCompileConfig(cppConfig.get("compile"))
+                .spj_src(spj_src)
+                .max_cpu_time(finalTime)
+                .max_memory((int) finalMemory)
+                .language_config(langConfig)
+                .spj_version(spjVersion)
+                .spj_config(cppConfig.get("run"))     // 对应 run 节点
+                .spj_compile_config(cppConfig.get("compile")) // 对应 compile 节点
                 .output(false)
-                .testCaseId(testCaseId) // 这里传入题目 ID (如 "19")
+                .test_case_id(testCaseId)
                 .build();
 
         // 5. 设置 Header (保持不变)
