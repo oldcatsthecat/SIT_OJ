@@ -9,4 +9,6 @@ public interface JudgeService {
 
     // 底层判题机通讯
     JudgeServerResponse<Object> sendToJudgeServer(String code, String language, String testCaseId, Integer timeLimit, Integer memoryLimit);
+
+    JudgeServerResponse<Object> sendToJudgeServerSpj(String code, String language, String testCaseId, Integer timeLimit, Integer memoryLimit, String spj_src);
 }

@@ -34,5 +34,8 @@ public class JudgeServerRequestSpj {
     @JsonProperty("spj_src")
     private String spjSrc; // 建议改名
 
+    @JsonProperty("test_case_id")
+    private String testCaseId;
+
     private Boolean output;
 }

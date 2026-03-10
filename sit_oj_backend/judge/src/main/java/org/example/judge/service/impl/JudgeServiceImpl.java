@@ -54,7 +54,7 @@ public class JudgeServiceImpl implements JudgeService {
             else
             {
                 String spj_code = (String) problem.get("spjCode");
-                body = sendToJudgeServerSpj(code, language, timeLimit, memoryLimit,spj_code);
+                body = sendToJudgeServerSpj(code, language, String.valueOf(problemId), timeLimit, memoryLimit,spj_code);
             }
             // 4. 解析判题机结果并转换 (逻辑下沉)
             return parseJudgeResponse(body, timeLimit);
@@ -174,7 +174,7 @@ public class JudgeServiceImpl implements JudgeService {
 
 
     //这里要修改
-    public JudgeServerResponse<Object> sendToJudgeServerSpj(String code, String language, Integer timeLimit, Integer memoryLimit, String spj_src) {
+    public JudgeServerResponse<Object> sendToJudgeServerSpj(String code, String language, String testCaseId, Integer timeLimit, Integer memoryLimit, String spj_src) {
         // 1. 生成加密 Token
         String token = DigestUtils.sha256Hex(judgeConfig.getToken());
 
@@ -211,6 +211,7 @@ public class JudgeServiceImpl implements JudgeService {
                 .spjConfig(cppConfig.get("config"))
                 .spjCompileConfig(cppConfig.get("compile"))
                 .output(false)
+                .testCaseId(testCaseId) // 这里传入题目 ID (如 "19")
                 .build();
 
         // 5. 设置 Header (保持不变)
