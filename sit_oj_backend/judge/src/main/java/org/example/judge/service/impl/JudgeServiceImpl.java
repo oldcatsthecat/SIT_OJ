@@ -228,7 +228,7 @@ public class JudgeServiceImpl implements JudgeService {
         System.out.println("发送 SPJ 请求至: " + finalUrl);
 
         try {
-            System.out.println("DEBUG JSON: " + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(request));
+            //System.out.println("DEBUG JSON: " + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(request));
             ResponseEntity<JudgeServerResponse<Object>> response = restTemplate.exchange(
                     finalUrl, HttpMethod.POST, entity,
                     new ParameterizedTypeReference<JudgeServerResponse<Object>>() {}
