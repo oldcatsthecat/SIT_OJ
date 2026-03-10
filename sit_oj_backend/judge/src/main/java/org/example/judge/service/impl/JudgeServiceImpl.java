@@ -174,45 +174,57 @@ public class JudgeServiceImpl implements JudgeService {
 
 
     //这里要修改
-    public JudgeServerResponse<Object> sendToJudgeServerSpj(String code, String language,  Integer timeLimit, Integer memoryLimit , String spj_src) {
+    public JudgeServerResponse<Object> sendToJudgeServerSpj(String code, String language, Integer timeLimit, Integer memoryLimit, String spj_src) {
         // 1. 生成加密 Token
         String token = DigestUtils.sha256Hex(judgeConfig.getToken());
 
-        // 2. 动态获取语言配置 (处理 Java 的 -Xmx)
+        // 2. 动态获取用户代码的语言配置
         Map<String, Object> langConfig = getDynamicLangConfig(language, memoryLimit);
 
         // 3. 设置运行限制
         int finalTime = (timeLimit != null) ? timeLimit : 1000;
-        long finalMemory ;
+        long finalMemory;
         if (language.toUpperCase().contains("PYTHON")) {
             finalMemory = (long) (memoryLimit + 512) * 1024 * 1024;
-        } else if(language.toUpperCase().contains("JAVA")){
+        } else if (language.toUpperCase().contains("JAVA")) {
             finalMemory = (long) (memoryLimit + 256) * 1024 * 1024;
+        } else {
+            finalMemory = (long) memoryLimit * 1024 * 1024;
         }
-        else finalMemory = (long) memoryLimit * 1024 * 1024;
 
-        System.out.println("最终内存为:" + finalMemory);
+        // --- 新增：准备 SPJ 必须的默认配置 (通常基于 C++ ) ---
+        // spj_version 通常使用源码的 MD5，防止判题机缓存了旧的编译结果
+        String spjVersion = DigestUtils.md5Hex(spj_src);
+
+        // 这里的 getDynamicLangConfig("C++", 256) 是为了获取 SPJ 脚本所需的编译/运行环境
+        // 注意：spj_config 和 spj_compile_config 必须是对应的配置对象
+        Map<String, Object> cppConfig = getDynamicLangConfig("C++", 256);
 
         // 4. 构建请求
         JudgeServerRequestSpj request = JudgeServerRequestSpj.builder()
                 .src(code)
-                .spj_src(spj_src)
-                .max_cpu_time(finalTime)
-                .max_memory((int) finalMemory)
-                .language_config(langConfig)
-                .output(false)//这里改了
+                .spjSrc(spj_src)          // 这里对应 DTO 里的 spjSrc 字段
+                .maxCpuTime(finalTime)     // 对应 maxCpuTime 字段
+                .maxMemory((int) finalMemory)
+                .languageConfig(langConfig)
+                .spjVersion(spjVersion)
+                .spjConfig(cppConfig.get("config"))
+                .spjCompileConfig(cppConfig.get("compile"))
+                .output(false)
                 .build();
 
-        // 5. 设置 Header
+        // 5. 设置 Header (保持不变)
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Judge-Server-Token", token);
         HttpEntity<JudgeServerRequestSpj> entity = new HttpEntity<>(request, headers);
 
-        // 6. URL 拼接处理 (自动去重 /judge)
+        // 6. URL 拼接处理 (保持不变)
         String baseUrl = judgeConfig.getServerUrl().trim();
         while (baseUrl.endsWith("/")) baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
         String finalUrl = baseUrl + (baseUrl.endsWith("/judge") ? "" : "/judge");
+
+        System.out.println("发送 SPJ 请求至: " + finalUrl);
 
         try {
             ResponseEntity<JudgeServerResponse<Object>> response = restTemplate.exchange(

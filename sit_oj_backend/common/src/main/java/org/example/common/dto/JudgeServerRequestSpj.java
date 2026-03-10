@@ -14,16 +14,25 @@ public class JudgeServerRequestSpj {
     private String src;
 
     @JsonProperty("language_config")
-    private Object language_config;
+    private Object languageConfig;
 
     @JsonProperty("max_cpu_time")
-    private Integer max_cpu_time;
+    private Integer maxCpuTime;
 
     @JsonProperty("max_memory")
-    private Integer max_memory;
+    private Integer maxMemory;
+
+    @JsonProperty("spj_version")
+    private String spjVersion;
+
+    @JsonProperty("spj_config")
+    private Object spjConfig;
+
+    @JsonProperty("spj_compile_config")
+    private Object spjCompileConfig;
 
     @JsonProperty("spj_src")
-    private String spj_src;
+    private String spjSrc; // 建议改名
 
     private Boolean output;
 }
