@@ -32,6 +32,9 @@ public class Problem extends BaseEntity {
     private Integer acceptedNumber;
     private Integer submissionNumber;
 
+    private Integer judgeType;
+    private String spjCode;
+
     @TableField(exist = false)
     private Boolean isSolved = false; // 非数据库字段，默认为 false
 

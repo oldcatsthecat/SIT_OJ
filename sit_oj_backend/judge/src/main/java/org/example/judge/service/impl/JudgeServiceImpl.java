@@ -3,12 +3,9 @@ package org.example.judge.service.impl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.example.common.dto.*;
 import org.example.judge.config.JudgeConfig;
 import org.example.judge.constants.JudgeConstants;
-import org.example.common.dto.JudgeResultItem;
-import org.example.common.dto.JudgeResultResponse;
-import org.example.common.dto.JudgeServerRequest;
-import org.example.common.dto.JudgeServerResponse;
 import org.example.judge.feign.ProblemFeignClient;
 import org.example.judge.feign.SubmissionFeignClient;
 import org.example.judge.service.JudgeService;
@@ -49,10 +46,16 @@ public class JudgeServiceImpl implements JudgeService {
             String language = (String) submission.get("language");
             Integer timeLimit = Integer.parseInt(String.valueOf(problem.get("timeLimit")));
             Integer memoryLimit = Integer.parseInt(String.valueOf(problem.get("memoryLimit")));
+            Integer judge_type = Integer.parseInt(String.valueOf(problem.get("judge_type")));
 
             // 3. 执行物理判题
-            JudgeServerResponse<Object> body = sendToJudgeServer(code, language, String.valueOf(problemId), timeLimit, memoryLimit);
-
+            JudgeServerResponse<Object> body ;
+            if(judge_type==0) body = sendToJudgeServer(code, language, String.valueOf(problemId), timeLimit, memoryLimit);
+            else
+            {
+                String spj_code = (String) problem.get("spj_code");
+                body = sendToJudgeServerSpj(code, language, timeLimit, memoryLimit,spj_code);
+            }
             // 4. 解析判题机结果并转换 (逻辑下沉)
             return parseJudgeResponse(body, timeLimit);
 
@@ -152,6 +155,59 @@ public class JudgeServiceImpl implements JudgeService {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Judge-Server-Token", token);
         HttpEntity<JudgeServerRequest> entity = new HttpEntity<>(request, headers);
+
+        // 6. URL 拼接处理 (自动去重 /judge)
+        String baseUrl = judgeConfig.getServerUrl().trim();
+        while (baseUrl.endsWith("/")) baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        String finalUrl = baseUrl + (baseUrl.endsWith("/judge") ? "" : "/judge");
+
+        try {
+            ResponseEntity<JudgeServerResponse<Object>> response = restTemplate.exchange(
+                    finalUrl, HttpMethod.POST, entity,
+                    new ParameterizedTypeReference<JudgeServerResponse<Object>>() {}
+            );
+            return response.getBody();
+        } catch (Exception e) {
+            return JudgeServerResponse.builder().err("SystemError").data(e.getMessage()).build();
+        }
+    }
+
+
+    //这里要修改
+    public JudgeServerResponse<Object> sendToJudgeServerSpj(String code, String language,  Integer timeLimit, Integer memoryLimit , String spj_src) {
+        // 1. 生成加密 Token
+        String token = DigestUtils.sha256Hex(judgeConfig.getToken());
+
+        // 2. 动态获取语言配置 (处理 Java 的 -Xmx)
+        Map<String, Object> langConfig = getDynamicLangConfig(language, memoryLimit);
+
+        // 3. 设置运行限制
+        int finalTime = (timeLimit != null) ? timeLimit : 1000;
+        long finalMemory ;
+        if (language.toUpperCase().contains("PYTHON")) {
+            finalMemory = (long) (memoryLimit + 512) * 1024 * 1024;
+        } else if(language.toUpperCase().contains("JAVA")){
+            finalMemory = (long) (memoryLimit + 256) * 1024 * 1024;
+        }
+        else finalMemory = (long) memoryLimit * 1024 * 1024;
+
+        System.out.println("最终内存为:" + finalMemory);
+
+        // 4. 构建请求
+        JudgeServerRequestSpj request = JudgeServerRequestSpj.builder()
+                .src(code)
+                .spj_src(spj_src)
+                .max_cpu_time(finalTime)
+                .max_memory((int) finalMemory)
+                .language_config(langConfig)
+                .output(false)//这里改了
+                .build();
+
+        // 5. 设置 Header
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Judge-Server-Token", token);
+        HttpEntity<JudgeServerRequestSpj> entity = new HttpEntity<>(request, headers);
 
         // 6. URL 拼接处理 (自动去重 /judge)
         String baseUrl = judgeConfig.getServerUrl().trim();

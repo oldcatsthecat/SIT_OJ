@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS problems (
     hint TEXT,
     time_limit INT DEFAULT 1000,
     memory_limit INT DEFAULT 128,
+    judge_type TINYINT DEFAULT 0,
+    spj_code TEXT,
     difficulty VARCHAR(20) DEFAULT 'Low',
     is_public BOOLEAN DEFAULT FALSE ,
     problem_source VARCHAR(100),
