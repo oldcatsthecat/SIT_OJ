@@ -198,18 +198,30 @@ public class JudgeServiceImpl implements JudgeService {
 
         // 这里的 getDynamicLangConfig("C++", 256) 是为了获取 SPJ 脚本所需的编译/运行环境
         // 注意：spj_config 和 spj_compile_config 必须是对应的配置对象
+
+        // 1. 获取 C++ 基础配置
         Map<String, Object> cppConfig = getDynamicLangConfig("C++", 256);
 
-        Map<String, Object> spjRunConfig = new HashMap<>((Map<String, Object>) cppConfig.get("run"));
-        // 关键：补上判题机 SPJ 逻辑需要的 exe_name
-        spjRunConfig.put("exe_name", "spj");
-        // 建议：SPJ 的运行命令通常用这个模板
-        spjRunConfig.put("command", "{exe_path} {in_file_path} {user_out_file_path}");
-
-        // 3. 准备 spj_compile_config
+        // 2. 准备 spj_compile_config (核心修正点)
         Map<String, Object> spjCompileConfig = new HashMap<>((Map<String, Object>) cppConfig.get("compile"));
+        // 确保 src_name 是 spj.cpp
         spjCompileConfig.put("src_name", "spj.cpp");
-        spjCompileConfig.put("exe_name", "spj"); // 这里的名字要和上面的 exe_name 一致
+        // 确保 exe_name 是 spj (要和报错路径里的文件名对应)
+        spjCompileConfig.put("exe_name", "spj");
+
+        // !!! 重点：检查编译命令中的路径占位符 !!!
+        // 判题机在编译 SPJ 时，通常需要 {src_path} 和 {exe_path}
+        String compileCmd = "/usr/bin/g++ -DONLINE_JUDGE -O2 spj.cpp -lm -o spj";
+        // 或者尝试使用更标准的：
+        // String compileCmd = "/usr/bin/g++ -DONLINE_JUDGE -w -O2 {src_path} -lm -o {exe_path}";
+        spjCompileConfig.put("compile_command", compileCmd);
+
+        // 3. 准备 spj_config (运行配置)
+        Map<String, Object> spjRunConfig = new HashMap<>((Map<String, Object>) cppConfig.get("run"));
+        spjRunConfig.put("exe_name", "spj");
+        // 运行命令：注意 SPJ 的参数顺序通常是 <input> <user_output> <answer>
+        // 不同的判题机内核占位符不同，建议先尝试最通用的：
+        spjRunConfig.put("command", "{exe_path} {in_file_path} {user_out_file_path}");
 
         // 4. 构建请求
         JudgeServerRequestSpj request = JudgeServerRequestSpj.builder()
