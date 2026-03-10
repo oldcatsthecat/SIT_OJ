@@ -10,6 +10,6 @@ public class TestCaseDetail {
     private String input_name;
     private String output_name;
     private String stripped_output_md5;
-    private long input_size;
-    private long output_size;
+    private Long input_size;
+    private Long output_size;
 }
