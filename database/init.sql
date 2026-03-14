@@ -108,3 +108,19 @@ CREATE TABLE IF NOT EXISTS competition_submission_stats (
     CONSTRAINT fk_stats_problem FOREIGN KEY (problem_id) REFERENCES problems(problem_id) ON DELETE CASCADE
     ) ENGINE=InnoDB;
 
+
+CREATE TRIGGER trg_after_delete_submission
+    AFTER DELETE ON submissions
+    FOR EACH ROW
+BEGIN
+    -- 无论删除的是什么状态，submission_number 都要减 1
+    UPDATE problems
+    SET submission_number = GREATEST(submission_number - 1, 0)
+    WHERE problem_id = OLD.problem_id;
+
+    IF OLD.status = 'AC' THEN
+    UPDATE problems
+    SET accepted_number = GREATEST(accepted_number - 1, 0)
+    WHERE problem_id = OLD.problem_id;
+END IF;
+END
