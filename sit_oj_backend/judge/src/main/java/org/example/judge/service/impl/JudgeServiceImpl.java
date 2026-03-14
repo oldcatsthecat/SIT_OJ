@@ -219,7 +219,7 @@ public class JudgeServiceImpl implements JudgeService {
         spjRunConfig.put("exe_name", "spj");
         // 运行命令：注意 SPJ 的参数顺序通常是 <input> <user_output> <answer>
         // 不同的判题机内核占位符不同，建议先尝试最通用的：
-        spjRunConfig.put("command", "{exe_path} {in_file_path} {user_out_file_path} {ans_file_path}");
+        spjRunConfig.put("command", "{exe_path} {in_file_path} {user_out_file_path}");
 
         // 4. 构建请求
         JudgeServerRequestSpj request = JudgeServerRequestSpj.builder()
