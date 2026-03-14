@@ -205,9 +205,8 @@ public class JudgeServiceImpl implements JudgeService {
         // 2. 准备 spj_compile_config (核心修正点)
         Map<String, Object> spjCompileConfig = new HashMap<>((Map<String, Object>) cppConfig.get("compile"));
         // 确保 src_name 是 spj.cpp
-        spjCompileConfig.put("src_name", "spj.cpp");
-        // 确保 exe_name 是 spj (要和报错路径里的文件名对应)
-        spjCompileConfig.put("exe_name", "spj");
+        spjCompileConfig.put("src_name", "spj-{spj_version}.cpp");
+        spjCompileConfig.put("exe_name", "spj-{spj_version}");
 
         // !!! 重点：检查编译命令中的路径占位符 !!!
         // 判题机在编译 SPJ 时，通常需要 {src_path} 和 {exe_path}
@@ -216,7 +215,7 @@ public class JudgeServiceImpl implements JudgeService {
 
         // 3. 准备 spj_config (运行配置)
         Map<String, Object> spjRunConfig = new HashMap<>((Map<String, Object>) cppConfig.get("run"));
-        spjRunConfig.put("exe_name", "spj");
+        spjRunConfig.put("exe_name", "spj-{spj_version}");
         // 运行命令：注意 SPJ 的参数顺序通常是 <input> <user_output> <answer>
         // 不同的判题机内核占位符不同，建议先尝试最通用的：
         spjRunConfig.put("command", "{exe_path} {in_file_path} {user_out_file_path}");
