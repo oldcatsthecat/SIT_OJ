@@ -77,7 +77,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 1024M
           cpus: '2.0' # 核心设置：4核服务器最多给判题机2核，留出2核给业务和系统
 
   # --- 微服务模块 ---

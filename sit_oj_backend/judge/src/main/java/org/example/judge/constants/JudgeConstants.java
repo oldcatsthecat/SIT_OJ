@@ -17,7 +17,7 @@ public class JudgeConstants {
         put("run", new HashMap<String, Object>() {{
             // 核心修改：添加了限制虚拟内存分配的 JVM 参数
             put("command", "/usr/bin/java -cp {exe_dir} " +
-                    "-Xss1M " +
+                    "-Xss8M " +
                     "-Xmx256M " +
                     "-XX:CompressedClassSpaceSize=64M " +
                     "-XX:MaxMetaspaceSize=64M " +
