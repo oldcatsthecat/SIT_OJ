@@ -211,9 +211,7 @@ public class JudgeServiceImpl implements JudgeService {
 
         // !!! 重点：检查编译命令中的路径占位符 !!!
         // 判题机在编译 SPJ 时，通常需要 {src_path} 和 {exe_path}
-        String compileCmd = "/usr/bin/g++ -DONLINE_JUDGE -O2 spj.cpp -lm -o spj";
-        // 或者尝试使用更标准的：
-        // String compileCmd = "/usr/bin/g++ -DONLINE_JUDGE -w -O2 {src_path} -lm -o {exe_path}";
+        String compileCmd = "/usr/bin/g++ -DONLINE_JUDGE -O2 {src_path} -lm -o {exe_path}";
         spjCompileConfig.put("compile_command", compileCmd);
 
         // 3. 准备 spj_config (运行配置)
@@ -221,7 +219,7 @@ public class JudgeServiceImpl implements JudgeService {
         spjRunConfig.put("exe_name", "spj");
         // 运行命令：注意 SPJ 的参数顺序通常是 <input> <user_output> <answer>
         // 不同的判题机内核占位符不同，建议先尝试最通用的：
-        spjRunConfig.put("command", "{exe_path} {in_file_path} {user_out_file_path}");
+        spjRunConfig.put("command", "{exe_path} {in_file_path} {user_out_file_path} {ans_file_path}");
 
         // 4. 构建请求
         JudgeServerRequestSpj request = JudgeServerRequestSpj.builder()
