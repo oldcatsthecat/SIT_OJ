@@ -65,11 +65,12 @@
                 <version>3.0.3</version>
             </dependency>
 
-            <!-- JSQLParser (MyBatis-Plus 分页插件 PaginationInnerInterceptor 依赖) -->
+            <!-- JSQLParser (MyBatis-Plus 分页插件 PaginationInnerInterceptor 依赖)
+                 MyBatis-Plus 3.5.7 需要 4.9+，3.5.3.1 兼容 4.9 -->
             <dependency>
                 <groupId>com.github.jsqlparser</groupId>
                 <artifactId>jsqlparser</artifactId>
-                <version>4.6</version>
+                <version>4.9</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
