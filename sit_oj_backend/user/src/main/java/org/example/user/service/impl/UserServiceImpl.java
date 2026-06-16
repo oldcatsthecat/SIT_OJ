@@ -3,6 +3,8 @@ package org.example.user.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -260,6 +262,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 .lt(User::getCodeExpireTime, LocalDateTime.now()); // 只删过期时间早于现在的
 
         userMapper.delete(wrapper);
+    }
+
+    @Override
+    public IPage<User> getUserPage(Integer current, Integer size) {
+        Page<User> page = new Page<>(current, size);
+        this.lambdaQuery()
+                .notLikeRight(User::getUsername, "tmp_")
+                .page(page);
+        page.getRecords().forEach(u -> u.setPassword(null));
+        return page;
     }
 
 }

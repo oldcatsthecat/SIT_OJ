@@ -1,5 +1,6 @@
 package org.example.user.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import org.example.user.entity.User;
 
@@ -18,4 +19,6 @@ public interface UserService extends IService<User> {
     void resetPassword(Map<String, Object> params);
 
     void clearTemporaryUsers();
+
+    IPage<User> getUserPage(Integer current, Integer size);
 }

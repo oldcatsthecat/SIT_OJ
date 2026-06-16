@@ -3,12 +3,10 @@ package org.example.competition.controller;
 import jakarta.servlet.http.HttpServletRequest;
 import org.example.common.utils.Result;
 import org.example.competition.entity.Competition;
-import org.example.competition.entity.Participation;
 import org.example.competition.service.CompetitionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -19,18 +17,17 @@ public class CompetitionController {
     private CompetitionService competitionService;
 
     /**
-     * 获取所有比赛列表
+     * 分页获取比赛列表
      * 不需要登录即可查看
      */
     @GetMapping("/list")
-    public Result getCompetitionList(HttpServletRequest request) {
+    public Result getCompetitionList(HttpServletRequest request,
+                                      @RequestParam(defaultValue = "1") Integer current,
+                                      @RequestParam(defaultValue = "20") Integer size) {
 
         Integer userId = (Integer) request.getAttribute("userId");
 
-        // 2. 调用你写好的 Service 方法
-        List<Competition> list = competitionService.getListWithRegisterStatus(userId);
-
-        return Result.success(list);
+        return Result.success(competitionService.getListWithRegisterStatus(userId, current, size));
     }
 
     /**
@@ -53,12 +50,14 @@ public class CompetitionController {
 
     /**
      * 获取比赛排名 (Standings)
-     * ACM 模式：解题数与罚时排名
+     * ACM 模式：解题数与罚时排名，默认每页20条
      */
     @GetMapping("/{id}/rank")
-    public Result getRanklist(@PathVariable Integer id) {
-        List<Participation> ranklist = competitionService.getRanklist(id);
-        return Result.success(ranklist);
+    public Result getRanklist(@PathVariable Integer id,
+                               @RequestParam(defaultValue = "1") Integer current,
+                               @RequestParam(defaultValue = "20") Integer size) {
+        Map<String, Object> result = competitionService.getRanklist(id, current, size);
+        return Result.success(result);
     }
 
     @PostMapping("/{id}/submit")

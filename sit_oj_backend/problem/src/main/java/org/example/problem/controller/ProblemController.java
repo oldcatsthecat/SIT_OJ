@@ -1,29 +1,29 @@
 package org.example.problem.controller;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import org.example.common.utils.Result;
 import org.example.problem.entity.Problem;
 import org.example.problem.service.ProblemService;
-import org.example.problem.service.TestCaseService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
-import org.example.common.utils.Result;
-import java.util.List;
 
 @RestController
 @RequestMapping("/problems")
 public class ProblemController {
 
     @Autowired
-    private ProblemService problemService; // 注入 Service
+    private ProblemService problemService;
 
     @GetMapping("/list")
-    public List<Problem> getProblemList(
+    public Result<IPage<Problem>> getProblemList(
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "20") Integer size,
             @RequestParam(value = "problemId", required = false) Integer problemId,
             @RequestAttribute(value = "userRole", required = false) String role,
-            @RequestAttribute(value = "userId", required = false) Integer userId){ // 假设从 Header 获取角色
+            @RequestAttribute(value = "userId", required = false) Integer userId) {
 
-        List<Problem> problems = problemService.getAvailableProblemsForUser(problemId, userId, role);
-        return problems;
+        IPage<Problem> page = problemService.getAvailableProblemsForUser(current, size, problemId, userId, role);
+        return Result.success(page);
     }
 
     @GetMapping("/{id}")

@@ -1,6 +1,9 @@
 package org.example.problem.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.example.problem.entity.Problem;
 import org.example.problem.mapper.ProblemMapper;
@@ -10,9 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-@Service // 别忘了这个注解，否则 Controller 无法注入
+@Service
 public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> implements ProblemService {
-    // 在 Problem 微服务的 ServiceImpl 中
+
     @Transactional
     public void updateStats(Integer problemId, boolean isAccepted) {
         this.update(new UpdateWrapper<Problem>()
@@ -23,40 +26,38 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
         );
     }
 
-    public List<Problem> getAvailableProblemsForUser(Integer problemId, Integer userId, String role) {
-        List<Problem> problems;
+    @Override
+    public IPage<Problem> getAvailableProblemsForUser(Integer current, Integer size,
+                                                       Integer problemId, Integer userId, String role) {
+        Page<Problem> page = new Page<>(current, size);
 
-        // 1. 获取原始题目列表
+        // 1. 分页查询题目列表
         if ("ADMIN".equals(role)) {
             // 管理员看全部
-            problems = (problemId != null)
-                    ? this.lambdaQuery().eq(Problem::getProblemId, problemId).list()
-                    : this.list();
+            if (problemId != null) {
+                this.lambdaQuery().eq(Problem::getProblemId, problemId).page(page);
+            } else {
+                this.lambdaQuery().page(page);
+            }
         } else {
-            // 普通用户调用你原来的 selectPublicProblems
-            problems = this.baseMapper.selectPublicProblems(problemId);
+            // 普通用户：只显示公开题目
+            LambdaQueryWrapper<Problem> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(Problem::getIsPublic, true);
+            if (problemId != null) {
+                wrapper.eq(Problem::getProblemId, problemId);
+            }
+            this.baseMapper.selectPage(page, wrapper);
         }
 
         // 2. 如果用户已登录，处理 isSolved 字段
-        if (userId != null && !problems.isEmpty()) {
-            // 查询该用户所有已通过的题目 ID
+        if (userId != null && !page.getRecords().isEmpty()) {
             List<Integer> acIds = this.baseMapper.selectAcceptedProblemIds(userId);
-
             if (acIds != null && !acIds.isEmpty()) {
-                // 将 List 转为 Set 提高查找效率
                 java.util.Set<Integer> acSet = new java.util.HashSet<>(acIds);
-
-                // 遍历题目列表，匹配状态
-                problems.forEach(p -> {
-                    if (acSet.contains(p.getProblemId())) {
-                        p.setIsSolved(true);
-                    } else {
-                        p.setIsSolved(false);
-                    }
-                });
+                page.getRecords().forEach(p -> p.setIsSolved(acSet.contains(p.getProblemId())));
             }
         }
 
-        return problems;
+        return page;
     }
 }

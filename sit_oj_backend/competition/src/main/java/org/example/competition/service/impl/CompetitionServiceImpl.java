@@ -3,6 +3,8 @@ package org.example.competition.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.example.common.utils.Result;
@@ -240,11 +242,17 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
 
 
     @Override
-    public List<Participation> getRanklist(Integer competitionId) {
+    public Map<String, Object> getRanklist(Integer competitionId, Integer current, Integer size) {
+        int start = (current - 1) * size;
+        int end = start + size - 1;
+
         // 1. 先尝试从 Redis 获取排行榜
         try {
-            List<Map<String, Object>> redisRanks = rankingService.getRankList(competitionId, 0, 99);
+            List<Map<String, Object>> redisRanks = rankingService.getRankList(competitionId, start, end);
             if (!redisRanks.isEmpty()) {
+                // 获取总参与人数
+                Long total = rankingService.getParticipantCount(competitionId);
+
                 // Redis 命中：用 userId 列表批量查询 MySQL
                 List<Integer> userIds = redisRanks.stream()
                         .map(m -> (Integer) m.get("userId"))
@@ -298,33 +306,43 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                     }
                 }
 
-                return ordered;
+                Map<String, Object> result = new HashMap<>();
+                result.put("records", ordered);
+                result.put("total", total);
+                return result;
             }
         } catch (Exception e) {
             log.error("Redis 排行榜读取失败，降级到 MySQL", e);
         }
 
-        // 2. Redis 未命中或异常 → 降级查 MySQL（原逻辑）
-        List<Participation> ranklist = participationMapper.getRanklist(competitionId);
-        if (ranklist.isEmpty()) return ranklist;
+        // 2. Redis 未命中或异常 → 降级查 MySQL（分页）
+        Page<Participation> pageParam = new Page<>(current, size);
+        IPage<Participation> page = participationMapper.getRanklistPage(pageParam, competitionId);
+        List<Participation> ranklist = page.getRecords();
 
-        List<Integer> userIds = ranklist.stream().map(Participation::getUserId).toList();
-        List<CompetitionSubmissionStats> allStats = statsMapper.selectList(
-                new LambdaQueryWrapper<CompetitionSubmissionStats>()
-                        .eq(CompetitionSubmissionStats::getCompetitionId, competitionId)
-                        .in(CompetitionSubmissionStats::getUserId, userIds)
-        );
+        if (!ranklist.isEmpty()) {
+            List<Integer> userIds = ranklist.stream().map(Participation::getUserId).toList();
+            List<CompetitionSubmissionStats> allStats = statsMapper.selectList(
+                    new LambdaQueryWrapper<CompetitionSubmissionStats>()
+                            .eq(CompetitionSubmissionStats::getCompetitionId, competitionId)
+                            .in(CompetitionSubmissionStats::getUserId, userIds)
+            );
 
-        Map<Integer, List<CompetitionSubmissionStats>> statsByUser = allStats.stream()
-                .collect(Collectors.groupingBy(CompetitionSubmissionStats::getUserId));
+            Map<Integer, List<CompetitionSubmissionStats>> statsByUser = allStats.stream()
+                    .collect(Collectors.groupingBy(CompetitionSubmissionStats::getUserId));
 
-        for (Participation p : ranklist) {
-            List<CompetitionSubmissionStats> userStats = statsByUser.getOrDefault(p.getUserId(), new ArrayList<>());
-            Map<Integer, CompetitionSubmissionStats> statMap = userStats.stream()
-                    .collect(Collectors.toMap(CompetitionSubmissionStats::getProblemId, s -> s));
-            p.setSubmissionStats(statMap);
+            for (Participation p : ranklist) {
+                List<CompetitionSubmissionStats> userStats = statsByUser.getOrDefault(p.getUserId(), new ArrayList<>());
+                Map<Integer, CompetitionSubmissionStats> statMap = userStats.stream()
+                        .collect(Collectors.toMap(CompetitionSubmissionStats::getProblemId, s -> s));
+                p.setSubmissionStats(statMap);
+            }
         }
-        return ranklist;
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("records", ranklist);
+        result.put("total", page.getTotal());
+        return result;
     }
 
     @Override
@@ -349,32 +367,31 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
     }
 
     @Override
-    public List<Competition> getListWithRegisterStatus(Integer userId) {
-        // 1. 获取所有比赛基础信息
-        List<Competition> competitions = this.list();
+    public IPage<Competition> getListWithRegisterStatus(Integer userId, Integer current, Integer size) {
+        // 1. 分页获取比赛基础信息
+        Page<Competition> page = new Page<>(current, size);
+        this.lambdaQuery().orderByDesc(Competition::getCreateTime).page(page);
 
-        // 2. 如果用户未登录，直接返回列表（此时 isRegistered 默认为 null/false）
+        // 2. 如果用户未登录，直接返回分页结果（此时 isRegistered 默认为 null/false）
         if (userId == null) {
-            return competitions;
+            return page;
         }
 
         // 3. 查询 participations 表，获取该用户参加的所有比赛 ID
-        // 这里的 participationService 对应你的 participations 表
         Set<Integer> registeredIds = participationService.list(
                         new LambdaQueryWrapper<Participation>()
                                 .eq(Participation::getUserId, userId)
-                                .select(Participation::getCompetitionId) // 仅查询 ID 列，提高效率
+                                .select(Participation::getCompetitionId)
                 ).stream()
                 .map(Participation::getCompetitionId)
                 .collect(Collectors.toSet());
 
         // 4. 批量回填状态到比赛对象中
-        competitions.forEach(c -> {
-            // 如果 set 中包含该 ID，说明已报名
-            c.setIsRegistered(registeredIds.contains(c.getCompetitionId()));
-        });
+        page.getRecords().forEach(c ->
+            c.setIsRegistered(registeredIds.contains(c.getCompetitionId()))
+        );
 
-        return competitions;
+        return page;
     }
 
 

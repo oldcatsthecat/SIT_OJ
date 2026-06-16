@@ -1,35 +1,28 @@
 package org.example.user.controller;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import org.example.common.utils.Result;
 import org.example.user.entity.User;
 import org.example.user.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @RestController
-@RequestMapping("/admin/users") // 统一加上 admin 前缀，明确这是管理端接口
+@RequestMapping("/admin/users")
 public class AdminUserController {
 
     @Autowired
     private UserService userService;
 
-
     /**
-     * 获取所有用户列表
-     * URL: GET /admin/users/list
+     * 分页获取用户列表
+     * URL: GET /admin/users/list?current=1&size=20
      */
     @GetMapping("/list")
-    public Result<List<User>> getAllUsers(@RequestHeader("Authorization") String token) {
-        // 使用 queryChain 方便进行条件过滤
-        List<User> list = userService.lambdaQuery()
-                .notLikeRight(User::getUsername, "tmp_") // 排除 tmp_ 开头的用户
-                .list();
-
-        list.forEach(u -> u.setPassword(null));
-        return Result.success(list);
+    public Result<IPage<User>> getAllUsers(@RequestHeader("Authorization") String token,
+                                           @RequestParam(defaultValue = "1") Integer current,
+                                           @RequestParam(defaultValue = "20") Integer size) {
+        return Result.success(userService.getUserPage(current, size));
     }
 
     /**
