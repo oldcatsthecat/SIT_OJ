@@ -72,8 +72,14 @@ public class JudgeServiceImpl implements JudgeService {
 
         // 编译错误处理
         if (body.getErr() != null) {
-            String status = "CompileError".equals(body.getErr()) ? "CE" : "SE";
-            return JudgeResultResponse.builder().status(status).errorMessage(String.valueOf(body.getData())).build();
+            String errType = body.getErr();
+            if ("CompileError".equals(errType)) {
+                return JudgeResultResponse.builder().status("CE").errorMessage(String.valueOf(body.getData())).build();
+            } else if ("SPJCompileError".equals(errType)) {
+                return JudgeResultResponse.builder().status("SE").errorMessage("SPJ编译错误: " + body.getData()).build();
+            } else {
+                return JudgeResultResponse.builder().status("SE").errorMessage(errType + ": " + body.getData()).build();
+            }
         }
 
         // 测试点解析
@@ -130,13 +136,9 @@ public class JudgeServiceImpl implements JudgeService {
 
         // 3. 设置运行限制
         int finalTime = (timeLimit != null) ? timeLimit : 1000;
-        long finalMemory ;
-        if (language.toUpperCase().contains("PYTHON")) {
-            finalMemory = (long) (memoryLimit + 512) * 1024 * 1024;
-        } else if(language.toUpperCase().contains("JAVA")){
-            finalMemory = (long) (memoryLimit + 256) * 1024 * 1024;
-        }
-        else finalMemory = (long) memoryLimit * 1024 * 1024;
+        // memoryLimit 单位为 MB，JudgeServer 的 max_memory 单位为 byte
+        // 不额外加内存余量，让 JudgeServer 自行处理（SPj 进程会在 JudgeServer 内部获得 3x max_memory）
+        long finalMemory = (long) memoryLimit * 1024 * 1024;
 
         System.out.println("最终内存为:" + finalMemory);
 
@@ -173,7 +175,6 @@ public class JudgeServiceImpl implements JudgeService {
     }
 
 
-    //这里要修改
     public JudgeServerResponse<Object> sendToJudgeServerSpj(String code, String language, String testCaseId, Integer timeLimit, Integer memoryLimit, String spj_src) {
         // 1. 生成加密 Token
         String token = DigestUtils.sha256Hex(judgeConfig.getToken());
@@ -182,45 +183,36 @@ public class JudgeServiceImpl implements JudgeService {
         Map<String, Object> langConfig = getDynamicLangConfig(language, memoryLimit);
 
         // 3. 设置运行限制
+        // memoryLimit 单位为 MB，JudgeServer 的 max_memory 单位为 byte
+        // 关键：不额外加内存余量！JudgeServer 的 _spj() 方法会将 max_memory × 3 作为 SPJ 进程的内存限制
+        // 如果加 512MB（Python）会导致 SPJ 内存 = (256+512)×3 = 2.3GB，超出容器 1GB 限制 → OOM → SPJ_ERROR
         int finalTime = (timeLimit != null) ? timeLimit : 1000;
-        long finalMemory;
-        if (language.toUpperCase().contains("PYTHON")) {
-            finalMemory = (long) (memoryLimit + 512) * 1024 * 1024;
-        } else if (language.toUpperCase().contains("JAVA")) {
-            finalMemory = (long) (memoryLimit + 256) * 1024 * 1024;
-        } else {
-            finalMemory = (long) memoryLimit * 1024 * 1024;
-        }
+        long finalMemory = (long) memoryLimit * 1024 * 1024;
 
-        // --- 新增：准备 SPJ 必须的默认配置 (通常基于 C++ ) ---
-        // spj_version 通常使用源码的 MD5，防止判题机缓存了旧的编译结果
+        // --- 准备 SPJ 必须的默认配置 (通常基于 C++ ) ---
+        // spj_version 使用源码的 MD5，防止判题机缓存了旧的编译结果
         String spjVersion = DigestUtils.md5Hex(spj_src);
 
-        // 这里的 getDynamicLangConfig("C++", 256) 是为了获取 SPJ 脚本所需的编译/运行环境
-        // 注意：spj_config 和 spj_compile_config 必须是对应的配置对象
-
-        // 1. 获取 C++ 基础配置
+        // 1. 获取 C++ 基础配置（用于 SPJ 的编译和运行，因为 SPJ 是 C++ 程序）
         Map<String, Object> cppConfig = getDynamicLangConfig("C++", 256);
 
-        // 2. 准备 spj_compile_config (核心修正点)
+        // 2. 准备 spj_compile_config
         Map<String, Object> spjCompileConfig = new HashMap<>((Map<String, Object>) cppConfig.get("compile"));
-        // 确保 src_name 是 spj.cpp
         spjCompileConfig.put("src_name", "spj-{spj_version}.cpp");
         spjCompileConfig.put("exe_name", "spj-{spj_version}");
+        // 判题机编译 SPJ 时使用 {exe_path} 占位符（= {exe_dir}/{exe_name}）
+        spjCompileConfig.put("compile_command", "/usr/bin/g++ -DONLINE_JUDGE -O2 -std=c++17 {src_path} -lm -o {exe_path}");
 
-        // !!! 重点：检查编译命令中的路径占位符 !!!
-        // 判题机在编译 SPJ 时，通常需要 {src_path} 和 {exe_path}
-        String compileCmd = "/usr/bin/g++ -DONLINE_JUDGE -O2 {src_path} -lm -o {exe_path}";
-        spjCompileConfig.put("compile_command", compileCmd);
-
-        // 3. 准备 spj_config (运行配置)
+        // 3. 准备 spj_config (SPJ 运行配置)
         Map<String, Object> spjRunConfig = new HashMap<>((Map<String, Object>) cppConfig.get("run"));
         spjRunConfig.put("exe_name", "spj-{spj_version}");
-        // 运行命令：注意 SPJ 的参数顺序通常是 <input> <user_output> <answer>
-        // 不同的判题机内核占位符不同，建议先尝试最通用的：
+        // SPJ 接收三个参数：输入文件路径、用户输出文件路径
         spjRunConfig.put("command", "{exe_path} {in_file_path} {user_out_file_path}");
 
-        // 4. 构建请求
+        // 4. 先显式调用 /compile_spj 预编译 SPJ（避免依赖 /judge 的 on-the-fly 编译）
+        compileSpjOnServer(token, spj_src, spjVersion, spjCompileConfig);
+
+        // 5. 构建 /judge 请求
         JudgeServerRequestSpj request = JudgeServerRequestSpj.builder()
                 .src(code)
                 .spj_src(spj_src)
@@ -228,19 +220,19 @@ public class JudgeServiceImpl implements JudgeService {
                 .max_memory((int) finalMemory)
                 .language_config(langConfig)
                 .spj_version(spjVersion)
-                .spj_config(spjRunConfig)         // 使用补全后的配置
-                .spj_compile_config(spjCompileConfig) // 使用补全后的编译配置
+                .spj_config(spjRunConfig)
+                .spj_compile_config(spjCompileConfig)
                 .output(false)
                 .test_case_id(testCaseId)
                 .build();
 
-        // 5. 设置 Header (保持不变)
+        // 6. 设置 Header
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-Judge-Server-Token", token);
         HttpEntity<JudgeServerRequestSpj> entity = new HttpEntity<>(request, headers);
 
-        // 6. URL 拼接处理 (保持不变)
+        // 7. URL 拼接处理
         String baseUrl = judgeConfig.getServerUrl().trim();
         while (baseUrl.endsWith("/")) baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
         String finalUrl = baseUrl + (baseUrl.endsWith("/judge") ? "" : "/judge");
@@ -248,14 +240,52 @@ public class JudgeServiceImpl implements JudgeService {
         System.out.println("发送 SPJ 请求至: " + finalUrl);
 
         try {
-            //System.out.println("DEBUG JSON: " + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(request));
             ResponseEntity<JudgeServerResponse<Object>> response = restTemplate.exchange(
                     finalUrl, HttpMethod.POST, entity,
                     new ParameterizedTypeReference<JudgeServerResponse<Object>>() {}
             );
             return response.getBody();
         } catch (Exception e) {
+            System.err.println("调用判题机 SPJ 接口异常: " + e.getMessage());
             return JudgeServerResponse.builder().err("SystemError").data(e.getMessage()).build();
+        }
+    }
+
+    /**
+     * 显式调用 JudgeServer 的 /compile_spj 接口预编译 SPJ 程序
+     * 这确保 SPJ 编译错误能被及时发现并返回明确的错误信息
+     */
+    private void compileSpjOnServer(String token, String spjSrc, String spjVersion, Map<String, Object> spjCompileConfig) {
+        String baseUrl = judgeConfig.getServerUrl().trim();
+        while (baseUrl.endsWith("/")) baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        String compileUrl = baseUrl + (baseUrl.endsWith("/compile_spj") ? "" : "/compile_spj");
+
+        Map<String, Object> compileRequest = new HashMap<>();
+        compileRequest.put("src", spjSrc);
+        compileRequest.put("spj_version", spjVersion);
+        compileRequest.put("spj_compile_config", spjCompileConfig);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Judge-Server-Token", token);
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(compileRequest, headers);
+
+        System.out.println("预编译 SPJ: " + compileUrl + " version=" + spjVersion);
+
+        try {
+            ResponseEntity<JudgeServerResponse<Object>> response = restTemplate.exchange(
+                    compileUrl, HttpMethod.POST, entity,
+                    new ParameterizedTypeReference<JudgeServerResponse<Object>>() {}
+            );
+            JudgeServerResponse<Object> body = response.getBody();
+            if (body != null && body.getErr() != null) {
+                System.err.println("SPJ 预编译失败: " + body.getErr() + " - " + body.getData());
+            } else {
+                System.out.println("SPJ 预编译成功");
+            }
+        } catch (Exception e) {
+            System.err.println("SPJ 预编译请求异常（将回退到 /judge 的 on-the-fly 编译）: " + e.getMessage());
+            // 不抛出异常，因为 /judge 接口内部也会尝试编译 SPJ
         }
     }
 

@@ -56,7 +56,7 @@ public class JudgeConstants {
         put("run", new HashMap<String, Object>() {{
             // 运行命令，注意对于 python3 来说，exe_path 指向的是源码或生成的字节码路径
             put("command", "/usr/bin/python3 {exe_path}");
-            put("seccomp_rule", null);
+            put("seccomp_rule", "general");  // 必须与 QingdaoOJ 原生配置一致
             put("env", new String[]{
                     "PYTHONIOENCODING=UTF-8",
                     "LANG=en_US.UTF-8",
