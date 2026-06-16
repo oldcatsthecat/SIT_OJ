@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: submission  # 去掉 -service
+    name: submission
   datasource:
     url: jdbc:mysql://localhost:3306/sit_oj?useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
     username: root
@@ -12,21 +12,58 @@ spring:
     nacos:
       discovery:
         server-addr: 127.0.0.1:8848
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: 5672
+    username: ${SPRING_RABBITMQ_USERNAME:oj_admin}
+    password: ${SPRING_RABBITMQ_PASSWORD:oj_rabbit_2026}
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 2
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 2000ms
 
-# Feign 配置建议放在顶层
+# Feign + Resilience4j 配置
 feign:
+  circuitbreaker:
+    enabled: true
   client:
     config:
       default:
         connectTimeout: 5000
         readTimeout: 60000
 
+# Resilience4j 熔断器配置
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        failure-rate-threshold: 50        # 50% 失败率触发熔断
+        wait-duration-in-open-state: 15s  # 熔断 15 秒后半开
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+    instances:
+      competitionClient:
+        base-config: default
+      problemClient:
+        base-config: default
+      judgeClient:
+        base-config: default
+        wait-duration-in-open-state: 30s  # judge 出问题多等一会
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 30s
+
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
 
 jwt:
-  # 必须至少 32 个字符，确保 HS256 算法安全
   secret: SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
-  # 过期时间，单位：毫秒 (86400000 = 24小时)
   expiration: 86400000

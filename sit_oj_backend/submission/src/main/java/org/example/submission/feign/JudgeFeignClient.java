@@ -5,7 +5,7 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
-@FeignClient(value = "judge")
+@FeignClient(value = "judge", fallbackFactory = JudgeFeignClientFallback.class)
 public interface JudgeFeignClient {
 
     // 返回值改为对象，Feign 会自动将 Judge 服务返回的 JSON 转为该对象

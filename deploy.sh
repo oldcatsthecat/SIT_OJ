@@ -1,7 +1,8 @@
 #!/bin/bash
 
 echo ">>>> [1/4] 拉取最新代码..."
-git pull origin main
+git pull origin main -d
+
 
 echo ">>>> [2/4] 进入后端目录并打包..."
 cd sit_oj_backend

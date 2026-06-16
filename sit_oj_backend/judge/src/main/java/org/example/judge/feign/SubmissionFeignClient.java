@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import java.util.Map;
 
 
-@FeignClient(value = "submission")
+@FeignClient(value = "submission", fallbackFactory = SubmissionFeignClientFallback.class)
 public interface SubmissionFeignClient {
 
     // 路径保持 /submissions/{id}，因为这是我们在 SubmissionController 里定义的映射

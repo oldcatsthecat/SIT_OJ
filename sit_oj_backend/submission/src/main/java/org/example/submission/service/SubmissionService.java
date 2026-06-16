@@ -20,7 +20,5 @@ public interface SubmissionService extends IService<Submission> {
 
     String getUserRoleFromToken(String token);
 
-    void executeJudgeAsync(Submission submission);
-
     IPage<Submission> getCompetitionSubmissions(Integer current, Integer size, Integer competitionId, Integer userId , String role);
 }

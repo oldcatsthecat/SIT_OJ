@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import java.util.Map;
 
 // value 必须对应 problem 模块 yml 中的 spring.application.name
-@FeignClient(value = "problem")
+@FeignClient(value = "problem", fallbackFactory = ProblemFeignClientFallback.class)
 public interface ProblemFeignClient {
 
     @GetMapping("/problems/{id}")

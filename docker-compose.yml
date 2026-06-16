@@ -57,6 +57,52 @@ services:
           memory: 512M
           cpus: '1.0' # 保证数据库读写有足够的响应能力
 
+  # Redis: 排行榜缓存 + 判题去重
+  oj-redis:
+    image: redis:7-alpine
+    container_name: oj-redis
+    networks:
+      - oj-net
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+          cpus: '0.3'
+
+  # RabbitMQ: 判题消息队列
+  oj-rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: oj-rabbitmq
+    networks:
+      - oj-net
+    environment:
+      - RABBITMQ_DEFAULT_USER=oj_admin
+      - RABBITMQ_DEFAULT_PASS=oj_rabbit_2026
+    ports:
+      - "15672:15672"  # Web管理台
+    volumes:
+      - ./data/rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: '0.5'
+
   # 判题服务器 (核心限制点：防止 CPU 100% 导致系统假死)
   oj-judge-server:
     image: registry.cn-hongkong.aliyuncs.com/oj-image/judge:1.6.1
@@ -161,11 +207,21 @@ services:
         condition: service_healthy
       oj-nacos:
         condition: service_healthy
+      oj-rabbitmq:
+        condition: service_healthy
+      oj-redis:
+        condition: service_healthy
     environment:
       - JAVA_OPTS=-Xms192m -Xmx256m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
       - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
+      - SPRING_RABBITMQ_HOST=oj-rabbitmq
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=oj_admin
+      - SPRING_RABBITMQ_PASSWORD=oj_rabbit_2026
+      - SPRING_DATA_REDIS_HOST=oj-redis
+      - SPRING_DATA_REDIS_PORT=6379
     restart: always
     deploy:
       resources:
@@ -183,11 +239,15 @@ services:
         condition: service_healthy
       oj-nacos:
         condition: service_healthy
+      oj-redis:
+        condition: service_healthy
     environment:
       - JAVA_OPTS=-Xms192m -Xmx256m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
       - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
+      - SPRING_DATA_REDIS_HOST=oj-redis
+      - SPRING_DATA_REDIS_PORT=6379
     restart: always
     deploy:
       resources:
@@ -205,6 +265,8 @@ services:
         condition: service_healthy
       oj-judge-server:
         condition: service_started
+      oj-rabbitmq:
+        condition: service_healthy
     environment:
       - JAVA_OPTS=-Xms128m -Xmx256m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
@@ -212,6 +274,10 @@ services:
       - OJ_JUDGE_TOKEN=SIT_OJ_JUDGE_TOKEN_2026
       - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
       - JWT_EXPIRATION=86400000
+      - SPRING_RABBITMQ_HOST=oj-rabbitmq
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=oj_admin
+      - SPRING_RABBITMQ_PASSWORD=oj_rabbit_2026
     restart: always
     deploy:
       resources:

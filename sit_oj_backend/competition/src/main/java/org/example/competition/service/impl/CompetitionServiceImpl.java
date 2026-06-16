@@ -9,9 +9,11 @@ import org.example.common.utils.Result;
 import org.example.competition.entity.*;
 import org.example.competition.feign.ProblemFeignClient;
 import org.example.competition.feign.SubmissionFeignClient;
+import org.example.competition.feign.UserFeignClient;
 import org.example.competition.mapper.*;
 import org.example.competition.service.CompetitionService;
 import org.example.competition.service.ParticipationService;
+import org.example.competition.service.RankingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +45,12 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
 
     @Autowired
     private SubmissionFeignClient submissionFeignClient;
+
+    @Autowired
+    private RankingService rankingService;
+
+    @Autowired
+    private UserFeignClient userFeignClient;
 
     @Override
     public Competition getCompetitionDetail(Integer id, Integer userId) {
@@ -204,17 +212,99 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         if (isNew) {
             statsMapper.insert(stats);
         } else {
-            // 因为没有主键 ID，使用条件更新
             statsMapper.update(stats, new LambdaUpdateWrapper<CompetitionSubmissionStats>()
                     .eq(CompetitionSubmissionStats::getUserId, userId)
                     .eq(CompetitionSubmissionStats::getCompetitionId, competitionId)
                     .eq(CompetitionSubmissionStats::getProblemId, problemId));
+        }
+
+        // 4. 同步更新 Redis 排行榜和题目状态缓存
+        try {
+            // 查询最新的 participation 数据
+            Participation participation = participationMapper.selectOne(
+                    new LambdaQueryWrapper<Participation>()
+                            .eq(Participation::getUserId, userId)
+                            .eq(Participation::getCompetitionId, competitionId));
+            if (participation != null) {
+                rankingService.updateRank(competitionId, userId,
+                        participation.getSolvedCount(),
+                        participation.getTotalPenalty());
+            }
+            // 缓存该用户此题的 AC 状态
+            rankingService.setProblemStatus(competitionId, userId, problemId, status);
+        } catch (Exception e) {
+            // Redis 更新失败不影响核心业务
+            log.error("Redis 排行榜同步失败", e);
         }
     }
 
 
     @Override
     public List<Participation> getRanklist(Integer competitionId) {
+        // 1. 先尝试从 Redis 获取排行榜
+        try {
+            List<Map<String, Object>> redisRanks = rankingService.getRankList(competitionId, 0, 99);
+            if (!redisRanks.isEmpty()) {
+                // Redis 命中：用 userId 列表批量查询 MySQL
+                List<Integer> userIds = redisRanks.stream()
+                        .map(m -> (Integer) m.get("userId"))
+                        .toList();
+
+                List<Participation> participations = participationMapper.selectList(
+                        new LambdaQueryWrapper<Participation>()
+                                .eq(Participation::getCompetitionId, competitionId)
+                                .in(Participation::getUserId, userIds));
+
+                // 保持 Redis 的排名顺序
+                Map<Integer, Participation> partMap = participations.stream()
+                        .collect(Collectors.toMap(Participation::getUserId, p -> p));
+
+                // 通过 Feign 批量获取用户信息（用户名、真名），补齐排行榜展示字段
+                for (Participation p : participations) {
+                    try {
+                        Map<String, Object> user = userFeignClient.getUserById(p.getUserId());
+                        if (user != null && !user.isEmpty()) {
+                            p.setUsername((String) user.get("username"));
+                            p.setRealName((String) user.get("realName"));
+                        }
+                    } catch (Exception e) {
+                        log.warn("获取用户信息失败 userId={}: {}", p.getUserId(), e.getMessage());
+                    }
+                }
+
+                List<Participation> ordered = new ArrayList<>();
+                for (Map<String, Object> rankItem : redisRanks) {
+                    Integer uid = (Integer) rankItem.get("userId");
+                    Participation p = partMap.get(uid);
+                    if (p != null) {
+                        ordered.add(p);
+                    }
+                }
+
+                // 补全 submissionStats 详情
+                if (!ordered.isEmpty()) {
+                    List<Integer> orderedUserIds = ordered.stream().map(Participation::getUserId).toList();
+                    List<CompetitionSubmissionStats> allStats = statsMapper.selectList(
+                            new LambdaQueryWrapper<CompetitionSubmissionStats>()
+                                    .eq(CompetitionSubmissionStats::getCompetitionId, competitionId)
+                                    .in(CompetitionSubmissionStats::getUserId, orderedUserIds));
+                    Map<Integer, List<CompetitionSubmissionStats>> statsByUser = allStats.stream()
+                            .collect(Collectors.groupingBy(CompetitionSubmissionStats::getUserId));
+                    for (Participation p : ordered) {
+                        List<CompetitionSubmissionStats> userStats = statsByUser.getOrDefault(p.getUserId(), new ArrayList<>());
+                        Map<Integer, CompetitionSubmissionStats> statMap = userStats.stream()
+                                .collect(Collectors.toMap(CompetitionSubmissionStats::getProblemId, s -> s));
+                        p.setSubmissionStats(statMap);
+                    }
+                }
+
+                return ordered;
+            }
+        } catch (Exception e) {
+            log.error("Redis 排行榜读取失败，降级到 MySQL", e);
+        }
+
+        // 2. Redis 未命中或异常 → 降级查 MySQL（原逻辑）
         List<Participation> ranklist = participationMapper.getRanklist(competitionId);
         if (ranklist.isEmpty()) return ranklist;
 

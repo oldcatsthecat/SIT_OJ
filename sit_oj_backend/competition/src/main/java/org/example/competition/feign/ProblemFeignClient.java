@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
-@FeignClient(value = "problem") // 替换为你的实际服务名
+@FeignClient(value = "problem", fallbackFactory = ProblemFeignClientFallback.class)
 public interface ProblemFeignClient {
 
     @GetMapping("/problems/{id}")

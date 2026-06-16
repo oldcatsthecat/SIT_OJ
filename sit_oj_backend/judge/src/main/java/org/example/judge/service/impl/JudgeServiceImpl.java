@@ -2,6 +2,7 @@ package org.example.judge.service.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.example.common.dto.*;
 import org.example.judge.config.JudgeConfig;
@@ -19,6 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 public class JudgeServiceImpl implements JudgeService {
 
@@ -32,6 +34,61 @@ public class JudgeServiceImpl implements JudgeService {
     private SubmissionFeignClient submissionFeignClient;
     @Autowired
     private ObjectMapper objectMapper;
+
+    /**
+     * RabbitMQ 消息入口：直接从 JudgeMessage 判题（无需 Feign 回调查询）
+     * 返回 JudgeResultMessage 供结果队列使用
+     */
+    @Override
+    public JudgeResultMessage processJudge(JudgeMessage message) {
+        try {
+            // 1. 获取题目信息
+            Map<String, Object> problem = fetchProblem(message.getProblemId());
+
+            // 2. 提取参数
+            String code = message.getCodeContent();
+            String language = message.getLanguage();
+            Integer timeLimit = Integer.parseInt(String.valueOf(problem.get("timeLimit")));
+            Integer memoryLimit = Integer.parseInt(String.valueOf(problem.get("memoryLimit")));
+            Integer judgeType = Integer.parseInt(String.valueOf(problem.get("judgeType")));
+
+            // 3. 执行判题
+            JudgeServerResponse<Object> body;
+            if (judgeType == 0) {
+                body = sendToJudgeServer(code, language, String.valueOf(message.getProblemId()), timeLimit, memoryLimit);
+            } else {
+                String spjCode = (String) problem.get("spjCode");
+                body = sendToJudgeServerSpj(code, language, String.valueOf(message.getProblemId()), timeLimit, memoryLimit, spjCode);
+            }
+
+            // 4. 解析判题结果
+            JudgeResultResponse judgeResult = parseJudgeResponse(body, timeLimit);
+
+            // 5. 构建消息结果
+            return JudgeResultMessage.builder()
+                    .submissionId(message.getSubmissionId())
+                    .userId(message.getUserId())
+                    .problemId(message.getProblemId())
+                    .competitionId(message.getCompetitionId())
+                    .status(judgeResult.getStatus())
+                    .timeCost(judgeResult.getTimeCost())
+                    .memoryCost(judgeResult.getMemoryCost())
+                    .judgeInfo(judgeResult.getJudgeInfo())
+                    .errorMessage(judgeResult.getErrorMessage())
+                    .build();
+
+        } catch (Exception e) {
+            log.error("判题异常: submissionId={}", message.getSubmissionId(), e);
+            return JudgeResultMessage.builder()
+                    .submissionId(message.getSubmissionId())
+                    .userId(message.getUserId())
+                    .problemId(message.getProblemId())
+                    .competitionId(message.getCompetitionId())
+                    .status("SE")
+                    .errorMessage("判题异常: " + e.getMessage())
+                    .build();
+        }
+    }
 
     @Override
     public JudgeResultResponse processJudge(Integer submissionId) {

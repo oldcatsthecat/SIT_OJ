@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import java.util.Map;
 
-@FeignClient(value = "submission" ,  configuration = FeignConfig.class) // 对应 submission 服务名
+@FeignClient(value = "submission", configuration = FeignConfig.class, fallbackFactory = SubmissionFeignClientFallback.class)
 public interface SubmissionFeignClient {
 
     /**

@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
  * 远程调用 Competition 比赛模块的客户端
  * name: 对应 competition 微服务在注册中心（如 Nacos）的服务名
  */
-@FeignClient(name = "competition")
+@FeignClient(name = "competition", fallbackFactory = CompetitionFeignClientFallback.class)
 public interface CompetitionFeignClient {
 
     /**
