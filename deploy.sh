@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo ">>>> [1/4] 拉取最新代码..."
-git pull origin main -d
+git pull origin main
 
 
 echo ">>>> [2/4] 进入后端目录并打包..."
