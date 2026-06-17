@@ -150,16 +150,16 @@ public class SubmissionServiceImpl extends ServiceImpl<SubmissionMapper, Submiss
         IPage<Submission> result = submissionMapper.selectPage(pageParam, queryWrapper);
 
         // 检查封榜状态
-        boolean isFrozen = false;
+        boolean frozenFlag = false;
         try {
             Result frozenRes = competitionFeignClient.checkFrozen(competitionId);
             if (frozenRes != null && frozenRes.getCode() == 200) {
-                isFrozen = Boolean.TRUE.equals(frozenRes.getData());
+                frozenFlag = Boolean.TRUE.equals(frozenRes.getData());
             }
         } catch (Exception ignored) {}
+        final boolean isFrozen = frozenFlag;
 
         boolean isAdmin = "ADMIN".equals(role);
-        final boolean maskFrozen = isFrozen && !isAdmin;
 
         result.getRecords().forEach(sub -> {
             try {
@@ -172,8 +172,8 @@ public class SubmissionServiceImpl extends ServiceImpl<SubmissionMapper, Submiss
                 sub.setCanSeeDetail(isOwner || isAdmin);
                 sub.setCodeContent(null);
 
-                // 封榜期间非管理员查看时，隐藏真实状态
-                if (maskFrozen) {
+                // 封榜期间：管理员和提交者本人可以看到真实结果，其他人看到 Frozen
+                if (isFrozen && !isAdmin && !isOwner) {
                     sub.setStatus("Frozen");
                 }
             } catch (Exception e) {
@@ -200,7 +200,10 @@ public class SubmissionServiceImpl extends ServiceImpl<SubmissionMapper, Submiss
             map.put("userId", sub.getUserId());
             map.put("problemId", sub.getProblemId());
             map.put("status", sub.getStatus());
-            map.put("submissionTime", sub.getSubmissionTime());
+            map.put("submissionTime", sub.getSubmissionTime() != null
+                    ? sub.getSubmissionTime().toString() : null);
+            map.put("language", sub.getLanguage());
+            map.put("timeCost", sub.getTimeCost());
             result.add(map);
         }
 
