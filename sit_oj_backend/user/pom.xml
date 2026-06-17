@@ -85,10 +85,11 @@
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
 
-        <!-- MyBatis-Plus 分页插件依赖 -->
+        <!-- MyBatis-Plus 分页插件依赖 (MP 3.5.7 需要 4.9) -->
         <dependency>
             <groupId>com.github.jsqlparser</groupId>
             <artifactId>jsqlparser</artifactId>
+            <version>4.9</version>
         </dependency>
     </dependencies>
 
