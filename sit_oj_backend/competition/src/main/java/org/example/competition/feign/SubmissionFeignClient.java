@@ -20,4 +20,7 @@ public interface SubmissionFeignClient {
 
     @GetMapping("/submissions/inner/stats/{competitionId}")
     Result<Map<String, Object>> getStatsByCompetition(@PathVariable("competitionId") Integer competitionId);
+
+    @GetMapping("/submissions/inner/export/{competitionId}")
+    java.util.List<java.util.Map<String, Object>> exportSubmissions(@PathVariable("competitionId") Integer competitionId);
 }

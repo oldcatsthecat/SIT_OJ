@@ -220,24 +220,35 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                     .eq(CompetitionSubmissionStats::getProblemId, problemId));
         }
 
-        // 4. 同步更新 Redis 排行榜和题目状态缓存
+        // 4. 同步更新 Redis 排行榜和题目状态缓存（封榜期间跳过）
         try {
-            // 查询最新的 participation 数据
-            Participation participation = participationMapper.selectOne(
-                    new LambdaQueryWrapper<Participation>()
-                            .eq(Participation::getUserId, userId)
-                            .eq(Participation::getCompetitionId, competitionId));
-            if (participation != null) {
-                rankingService.updateRank(competitionId, userId,
-                        participation.getSolvedCount(),
-                        participation.getTotalPenalty());
+            if (!isInFreezePeriod(comp)) {
+                Participation participation = participationMapper.selectOne(
+                        new LambdaQueryWrapper<Participation>()
+                                .eq(Participation::getUserId, userId)
+                                .eq(Participation::getCompetitionId, competitionId));
+                if (participation != null) {
+                    rankingService.updateRank(competitionId, userId,
+                            participation.getSolvedCount(),
+                            participation.getTotalPenalty());
+                }
+                rankingService.setProblemStatus(competitionId, userId, problemId, status);
             }
-            // 缓存该用户此题的 AC 状态
-            rankingService.setProblemStatus(competitionId, userId, problemId, status);
         } catch (Exception e) {
-            // Redis 更新失败不影响核心业务
             log.error("Redis 排行榜同步失败", e);
         }
+    }
+
+    /**
+     * 判断比赛当前是否处于封榜期（结束前 freezeMinute 分钟 ~ 结束时刻）
+     */
+    private boolean isInFreezePeriod(Competition comp) {
+        if (comp.getFreezeMinute() == null || comp.getFreezeMinute() <= 0) return false;
+        if (comp.getEndTime() == null) return false;
+        LocalDateTime freezeStart = comp.getEndTime().minusMinutes(comp.getFreezeMinute());
+        LocalDateTime now = LocalDateTime.now();
+        // 封榜持续到管理员手动解封，不随比赛结束自动解榜
+        return now.isAfter(freezeStart);
     }
 
 
@@ -245,6 +256,10 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
     public Map<String, Object> getRanklist(Integer competitionId, Integer current, Integer size) {
         int start = (current - 1) * size;
         int end = start + size - 1;
+
+        // 检查封榜状态
+        Competition comp = this.getById(competitionId);
+        boolean isFrozen = comp != null && isInFreezePeriod(comp);
 
         // 1. 先尝试从 Redis 获取排行榜
         try {
@@ -309,6 +324,7 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                 Map<String, Object> result = new HashMap<>();
                 result.put("records", ordered);
                 result.put("total", total);
+                result.put("isFrozen", isFrozen);
                 return result;
             }
         } catch (Exception e) {
@@ -342,6 +358,7 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         Map<String, Object> result = new HashMap<>();
         result.put("records", ranklist);
         result.put("total", page.getTotal());
+        result.put("isFrozen", isFrozen);
         return result;
     }
 
@@ -394,5 +411,174 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         return page;
     }
 
+    @Override
+    public boolean isFrozen(Integer competitionId) {
+        Competition comp = this.getById(competitionId);
+        return comp != null && isInFreezePeriod(comp);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Result unfreeze(Integer competitionId) {
+        Competition comp = this.getById(competitionId);
+        if (comp == null) return Result.error("比赛不存在");
+        if (comp.getFreezeMinute() == null || comp.getFreezeMinute() <= 0) {
+            return Result.error("该比赛未设置封榜");
+        }
+
+        // 1. 清除封榜
+        comp.setFreezeMinute(0);
+        this.updateById(comp);
+
+        // 2. 重建 Redis 排名（封榜期间的提交只写了 MySQL，需同步到 Redis）
+        try {
+            List<Participation> all = participationMapper.selectList(
+                    new LambdaQueryWrapper<Participation>()
+                            .eq(Participation::getCompetitionId, competitionId));
+            for (Participation p : all) {
+                rankingService.updateRank(competitionId, p.getUserId(),
+                        p.getSolvedCount(), p.getTotalPenalty());
+            }
+            log.info("比赛 {} 已解封，Redis 排名已重建 ({} 名参赛者)", competitionId, all.size());
+        } catch (Exception e) {
+            log.error("解封后重建 Redis 排名失败", e);
+        }
+
+        return Result.success("解封成功");
+    }
+
+    @Override
+    public String exportForResolver(Integer competitionId) {
+        Competition comp = this.getById(competitionId);
+        if (comp == null) return null;
+
+        List<Participation> parts = participationMapper.selectList(
+                new LambdaQueryWrapper<Participation>()
+                        .eq(Participation::getCompetitionId, competitionId));
+        List<CompetitionProblem> cpList = cpMapper.selectList(
+                new LambdaQueryWrapper<CompetitionProblem>()
+                        .eq(CompetitionProblem::getCompetitionId, competitionId));
+
+        // 获取问题详情
+        Map<Integer, String> problemLabels = new java.util.LinkedHashMap<>();
+        List<Integer> pids = cpList.stream().map(CompetitionProblem::getProblemId).toList();
+        int idx = 0;
+        for (Integer pid : pids) {
+            problemLabels.put(pid, String.valueOf((char) ('A' + idx++)));
+        }
+
+        // 构建 NDJSON
+        StringBuilder sb = new StringBuilder();
+
+        // Contest info
+        sb.append("{\"type\":\"contests\",\"id\":\"").append(competitionId).append("\",\"data\":{");
+        sb.append("\"id\":\"").append(competitionId).append("\",");
+        sb.append("\"name\":\"").append(escapeJson(comp.getCompetitionName())).append("\",");
+        sb.append("\"start_time\":\"").append(comp.getStartTime()).append("\",");
+        sb.append("\"end_time\":\"").append(comp.getEndTime()).append("\",");
+        sb.append("\"duration\":\"").append(formatDuration(comp.getStartTime(), comp.getEndTime())).append("\",");
+        sb.append("\"scoreboard_freeze_duration\":\"").append(formatFreezeDuration(comp.getFreezeMinute())).append("\",");
+        sb.append("\"scoreboard_type\":\"pass-fail\"");
+        sb.append("}}\n");
+
+        // Teams
+        for (Participation p : parts) {
+            String teamName = "User" + p.getUserId();
+            try {
+                Map<String, Object> user = userFeignClient.getUserById(p.getUserId());
+                if (user != null && !user.isEmpty()) {
+                    teamName = (String) user.getOrDefault("realName",
+                            user.getOrDefault("username", "User" + p.getUserId()));
+                }
+            } catch (Exception ignored) {}
+            sb.append("{\"type\":\"teams\",\"id\":\"").append(p.getUserId()).append("\",\"data\":{");
+            sb.append("\"id\":\"").append(p.getUserId()).append("\",");
+            sb.append("\"name\":\"").append(escapeJson(teamName)).append("\",");
+            sb.append("\"group_ids\":[]");
+            sb.append("}}\n");
+        }
+
+        // Problems
+        for (Map.Entry<Integer, String> e : problemLabels.entrySet()) {
+            sb.append("{\"type\":\"problems\",\"id\":\"").append(e.getKey()).append("\",\"data\":{");
+            sb.append("\"id\":\"").append(e.getKey()).append("\",");
+            sb.append("\"label\":\"").append(e.getValue()).append("\",");
+            sb.append("\"name\":\"").append(e.getValue()).append("\"");
+            sb.append("}}\n");
+        }
+
+        // Submissions & Judgements
+        try {
+            List<Map<String, Object>> rawSubs = getCompetitionSubmissionsForExport(competitionId);
+            for (Map<String, Object> sub : rawSubs) {
+                Integer subId = (Integer) sub.get("submissionId");
+                Integer uid = (Integer) sub.get("userId");
+                Integer pid = (Integer) sub.get("problemId");
+                String status = (String) sub.get("status");
+                java.time.LocalDateTime subTime = (java.time.LocalDateTime) sub.get("submissionTime");
+                long contestMin = java.time.Duration.between(comp.getStartTime(), subTime).toMinutes();
+
+                sb.append("{\"type\":\"submissions\",\"id\":\"").append(subId).append("\",\"data\":{");
+                sb.append("\"id\":\"").append(subId).append("\",");
+                sb.append("\"team_id\":\"").append(uid).append("\",");
+                sb.append("\"problem_id\":\"").append(pid).append("\",");
+                sb.append("\"contest_time\":\"").append(formatContestTime(contestMin)).append("\"");
+                sb.append("}}\n");
+
+                String judgement = mapStatus(status);
+                sb.append("{\"type\":\"judgements\",\"id\":\"J").append(subId).append("\",\"data\":{");
+                sb.append("\"id\":\"J").append(subId).append("\",");
+                sb.append("\"submission_id\":\"").append(subId).append("\",");
+                sb.append("\"judgement_type_id\":\"").append(judgement).append("\"");
+                sb.append("}}\n");
+            }
+        } catch (Exception e) {
+            log.error("导出比赛提交数据失败", e);
+        }
+
+        return sb.toString();
+    }
+
+    // --- Helper methods for export ---
+
+    private List<Map<String, Object>> getCompetitionSubmissionsForExport(Integer competitionId) {
+        try {
+            return submissionFeignClient.exportSubmissions(competitionId);
+        } catch (Exception e) {
+            log.error("导出比赛提交失败: competitionId={}", competitionId, e);
+            return new ArrayList<>();
+        }
+    }
+
+    private String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\n", "\\n").replace("\r", "\\r");
+    }
+
+    private String formatDuration(LocalDateTime start, LocalDateTime end) {
+        long mins = java.time.Duration.between(start, end).toMinutes();
+        return String.format("%d:%02d:00", mins / 60, mins % 60);
+    }
+
+    private String formatFreezeDuration(Integer freezeMinute) {
+        if (freezeMinute == null || freezeMinute <= 0) return "0:00:00";
+        return String.format("%d:%02d:00", freezeMinute / 60, freezeMinute % 60);
+    }
+
+    private String formatContestTime(long minutes) {
+        return String.format("%d:%02d:00", minutes / 60, minutes % 60);
+    }
+
+    private String mapStatus(String status) {
+        if (status == null) return "WA";
+        String s = status.toUpperCase();
+        if (s.contains("AC")) return "AC";
+        if (s.contains("WA") || s.contains("WRONG")) return "WA";
+        if (s.contains("TLE")) return "TLE";
+        if (s.contains("CE") || s.contains("COMPILE")) return "CE";
+        if (s.contains("RE") || s.contains("RUNTIME")) return "RTE";
+        return "WA";
+    }
 
 }

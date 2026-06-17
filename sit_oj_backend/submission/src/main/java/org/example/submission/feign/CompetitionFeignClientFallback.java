@@ -15,10 +15,20 @@ public class CompetitionFeignClientFallback implements FallbackFactory<Competiti
     @Override
     public CompetitionFeignClient create(Throwable cause) {
         log.error("CompetitionFeignClient 熔断触发: {}", cause.getMessage());
-        return (userId, competitionId, problemId, status) -> {
-            log.warn("CompetitionFeignClient 降级: 排行榜更新延迟, competition={}, user={}",
-                    competitionId, userId);
-            return Result.error("比赛服务暂时不可用，排行榜将延迟更新");
+        return new CompetitionFeignClient() {
+            @Override
+            public Result updateRankStats(Integer userId, Integer competitionId,
+                                          Integer problemId, String status) {
+                log.warn("CompetitionFeignClient 降级: 排行榜更新延迟, competition={}, user={}",
+                        competitionId, userId);
+                return Result.error("比赛服务暂时不可用，排行榜将延迟更新");
+            }
+
+            @Override
+            public Result checkFrozen(Integer id) {
+                log.warn("CompetitionFeignClient.checkFrozen 降级: id={}", id);
+                return Result.success(false);
+            }
         };
     }
 }

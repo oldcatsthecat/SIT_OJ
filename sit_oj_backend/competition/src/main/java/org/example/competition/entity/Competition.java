@@ -25,6 +25,11 @@ public class Competition {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime endTime;
 
+    /**
+     * 封榜时长（分钟）：比赛结束前 freezeMinute 分钟起排名不再公开更新，0 表示不封榜
+     */
+    private Integer freezeMinute;
+
     private LocalDateTime createTime;
 
     // --- 非数据库映射字段 ---

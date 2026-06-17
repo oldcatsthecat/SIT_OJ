@@ -50,6 +50,8 @@ public class AdminCompetitionController {
         if (competition.getCompetitionId() == null) {
             return Result.error("比赛ID不能为空");
         }
+        // 封榜时间仅允许创建时指定，不允许修改
+        competition.setFreezeMinute(null);
         boolean success = competitionService.updateById(competition);
         return success ? Result.success("更新成功") : Result.error("更新失败");
     }
@@ -59,5 +61,23 @@ public class AdminCompetitionController {
     public Result deleteCompetition(@PathVariable Integer id) {
         boolean success = competitionService.removeById(id);
         return success ? Result.success("删除成功") : Result.error("删除失败");
+    }
+
+    /**
+     * 管理员手动解封比赛
+     */
+    @PostMapping("/{id}/unfreeze")
+    public Result unfreezeCompetition(@PathVariable Integer id) {
+        return competitionService.unfreeze(id);
+    }
+
+    /**
+     * 导出比赛数据为 ICPC Resolver NDJSON 格式
+     */
+    @GetMapping("/{id}/export")
+    public Result exportForResolver(@PathVariable Integer id) {
+        String ndjson = competitionService.exportForResolver(id);
+        if (ndjson == null) return Result.error("比赛不存在");
+        return Result.success(ndjson);
     }
 }

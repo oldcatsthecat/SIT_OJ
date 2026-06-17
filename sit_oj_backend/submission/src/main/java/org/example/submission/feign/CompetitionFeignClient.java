@@ -1,7 +1,9 @@
 package org.example.submission.feign;
 
-import org.example.common.utils.Result; // 假设你的 Result 类在这个包下
+import org.example.common.utils.Result;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -14,11 +16,16 @@ public interface CompetitionFeignClient {
 
     /**
      * 更新比赛的排名统计数据
-     * 对应 Competition 模块 Controller 中的 internal/updateStats 接口
      */
     @PostMapping("/competitions/internal/updateStats")
     Result updateRankStats(@RequestParam("userId") Integer userId,
                            @RequestParam("competitionId") Integer competitionId,
                            @RequestParam("problemId") Integer problemId,
                            @RequestParam("status") String status);
+
+    /**
+     * 检查比赛是否处于封榜期
+     */
+    @GetMapping("/competitions/inner/{id}/frozen")
+    Result checkFrozen(@PathVariable("id") Integer id);
 }

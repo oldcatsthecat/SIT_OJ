@@ -109,14 +109,17 @@ public class SubmissionController {
         Integer userId = (Integer) request.getAttribute("userId");
         String role = (String) request.getAttribute("userRole");
 
-        // 1. 调用 Service 层进行分页查询
-        // 这里的 service 方法需要包含：
-        // - 过滤 competition_id = competitionId
-        // - 关联查询题目名称（对应前端 A, B, C 编号）
-        // - 关联查询用户名
-        IPage<Submission> page = submissionService.getCompetitionSubmissions(current, size, competitionId, userId,role);
+        IPage<Submission> page = submissionService.getCompetitionSubmissions(current, size, competitionId, userId, role);
 
         return Result.success(page);
+    }
+
+    /**
+     * 内部接口：导出比赛所有提交（用于 ICPC 滚榜数据生成）
+     */
+    @GetMapping("/inner/export/{competitionId}")
+    public List<Map<String, Object>> exportCompetitionSubmissions(@PathVariable Integer competitionId) {
+        return submissionService.getExportSubmissions(competitionId);
     }
 
 }

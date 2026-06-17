@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS competitions (
                                             competition_name VARCHAR(100) NOT NULL,
     start_time DATETIME,
     end_time DATETIME,
+    freeze_minute INT DEFAULT 0 COMMENT '封榜时长(分钟)，0=不封榜，表示结束前N分钟冻结排名',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB;
 

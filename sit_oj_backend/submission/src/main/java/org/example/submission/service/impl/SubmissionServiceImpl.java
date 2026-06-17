@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.common.dto.JudgeMessage;
+import org.example.common.utils.Result;
 import org.example.submission.entity.Submission;
 import org.example.submission.feign.CompetitionFeignClient;
 import org.example.submission.feign.JudgeFeignClient;
@@ -148,6 +149,18 @@ public class SubmissionServiceImpl extends ServiceImpl<SubmissionMapper, Submiss
         Page<Submission> pageParam = new Page<>(current, size);
         IPage<Submission> result = submissionMapper.selectPage(pageParam, queryWrapper);
 
+        // 检查封榜状态
+        boolean isFrozen = false;
+        try {
+            Result frozenRes = competitionFeignClient.checkFrozen(competitionId);
+            if (frozenRes != null && frozenRes.getCode() == 200) {
+                isFrozen = Boolean.TRUE.equals(frozenRes.getData());
+            }
+        } catch (Exception ignored) {}
+
+        boolean isAdmin = "ADMIN".equals(role);
+        final boolean maskFrozen = isFrozen && !isAdmin;
+
         result.getRecords().forEach(sub -> {
             try {
                 java.util.Map<String, Object> user = userFeignClient.getUserById(sub.getUserId());
@@ -156,14 +169,40 @@ public class SubmissionServiceImpl extends ServiceImpl<SubmissionMapper, Submiss
                 }
 
                 boolean isOwner = userId != null && userId.equals(sub.getUserId());
-                boolean isAdmin = "ADMIN".equals(role);
                 sub.setCanSeeDetail(isOwner || isAdmin);
                 sub.setCodeContent(null);
+
+                // 封榜期间非管理员查看时，隐藏真实状态
+                if (maskFrozen) {
+                    sub.setStatus("Frozen");
+                }
             } catch (Exception e) {
                 sub.setUsername("未知用户");
                 sub.setProblemName("题目 ID: " + sub.getProblemId());
             }
         });
+
+        return result;
+    }
+
+    @Override
+    public java.util.List<java.util.Map<String, Object>> getExportSubmissions(Integer competitionId) {
+        QueryWrapper<Submission> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("competition_id", competitionId)
+                .orderByAsc("submission_id");
+
+        java.util.List<Submission> subs = submissionMapper.selectList(queryWrapper);
+        java.util.List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
+
+        for (Submission sub : subs) {
+            java.util.Map<String, Object> map = new java.util.HashMap<>();
+            map.put("submissionId", sub.getSubmissionId());
+            map.put("userId", sub.getUserId());
+            map.put("problemId", sub.getProblemId());
+            map.put("status", sub.getStatus());
+            map.put("submissionTime", sub.getSubmissionTime());
+            result.add(map);
+        }
 
         return result;
     }

@@ -27,4 +27,13 @@ public interface CompetitionService extends IService<Competition> {
 
     IPage<Competition> getListWithRegisterStatus(Integer userId, Integer current, Integer size);
 
+    /** 检查比赛是否处于封榜期 */
+    boolean isFrozen(Integer competitionId);
+
+    /** 管理员手动解封比赛（设置 freezeMinute=0 并重建 Redis 排名） */
+    Result unfreeze(Integer competitionId);
+
+    /** 导出比赛数据为 ICPC Resolver NDJSON 格式 */
+    String exportForResolver(Integer competitionId);
+
 }

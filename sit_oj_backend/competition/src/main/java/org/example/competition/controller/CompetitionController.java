@@ -95,9 +95,16 @@ public class CompetitionController {
                                                                  @RequestParam Integer competitionId,
                                                                  @RequestParam Integer problemId,
                                                                  @RequestParam String status) {
-        // 执行你原来的 updateAcmStats 逻辑
         competitionService.updateAcmStats(userId, competitionId, problemId, status);
         return Result.success();
+    }
+
+    /**
+     * 内部接口：检查比赛是否处于封榜期
+     */
+    @GetMapping("/inner/{id}/frozen")
+    public Result checkFrozen(@PathVariable Integer id) {
+        return Result.success(competitionService.isFrozen(id));
     }
 
 }

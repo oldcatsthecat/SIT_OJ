@@ -6,6 +6,8 @@ import org.example.competition.config.FeignConfig;
 import org.springframework.cloud.openfeign.FallbackFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -29,6 +31,12 @@ public class SubmissionFeignClientFallback implements FallbackFactory<Submission
             public Result<Map<String, Object>> getStatsByCompetition(Integer competitionId) {
                 log.warn("SubmissionFeignClient.getStatsByCompetition 降级: competitionId={}", competitionId);
                 return Result.error("统计数据暂不可用");
+            }
+
+            @Override
+            public List<Map<String, Object>> exportSubmissions(Integer competitionId) {
+                log.warn("SubmissionFeignClient.exportSubmissions 降级: competitionId={}", competitionId);
+                return Collections.emptyList();
             }
         };
     }
