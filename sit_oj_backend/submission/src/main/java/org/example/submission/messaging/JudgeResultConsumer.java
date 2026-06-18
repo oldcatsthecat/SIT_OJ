@@ -47,17 +47,12 @@ public class JudgeResultConsumer {
 
             // 2. 如果是比赛提交，回调 Competition 模块更新 ACM 分数
             if (result.getCompetitionId() != null) {
-                log.info("回调竞赛模块更新排名: userId={}, compId={}, problemId={}, status={}",
-                        result.getUserId(), result.getCompetitionId(), result.getProblemId(), result.getStatus());
-                var rankRes = competitionFeignClient.updateRankStats(
+                competitionFeignClient.updateRankStats(
                         result.getUserId(),
                         result.getCompetitionId(),
                         result.getProblemId(),
                         result.getStatus()
                 );
-                if (rankRes == null || rankRes.getCode() != 200) {
-                    log.warn("竞赛排名更新失败(可能封榜期正常跳过): code={}", rankRes != null ? rankRes.getCode() : "null");
-                }
             }
 
             // 3. 更新题目提交/通过统计

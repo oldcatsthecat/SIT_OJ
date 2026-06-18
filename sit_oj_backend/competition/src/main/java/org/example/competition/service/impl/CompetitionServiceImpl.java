@@ -188,8 +188,6 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
 
         // 封榜期间：只更新尝试次数，AC / participations / Redis 排名分数 全部冻结
         if (frozen) {
-            log.info("封榜期更新尝试次数: userId={}, compId={}, problemId={}, status={}, isAc={}, wrongAttempts={}",
-                    userId, competitionId, problemId, status, isAc, stats.getWrongAttempts() + 1);
             if (!isAc && !"CE".equalsIgnoreCase(status)) {
                 stats.setWrongAttempts(stats.getWrongAttempts() + 1);
                 if (isNew) statsMapper.insert(stats);
@@ -197,11 +195,8 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                         .eq(CompetitionSubmissionStats::getUserId, userId)
                         .eq(CompetitionSubmissionStats::getCompetitionId, competitionId)
                         .eq(CompetitionSubmissionStats::getProblemId, problemId));
-                log.info("封榜期 stats 已写入: isNew={}, wrongAttempts={}", isNew, stats.getWrongAttempts());
                 try { rankingService.setProblemStatus(competitionId, userId, problemId, "Frozen"); }
                 catch (Exception e) { log.error("封榜期同步尝试次数失败", e); }
-            } else {
-                log.info("封榜期跳过(AC或CE): status={}", status);
             }
             return;
         }

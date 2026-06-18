@@ -18,8 +18,11 @@ import org.example.submission.mapper.SubmissionMapper;
 import org.example.submission.messaging.JudgeProducer;
 import org.example.submission.service.SubmissionService;
 import org.example.submission.utils.JwtUtils;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import jakarta.annotation.PostConstruct;
 
 import java.util.HashMap;
 import java.util.List;
@@ -67,6 +70,48 @@ public class SubmissionServiceImpl extends ServiceImpl<SubmissionMapper, Submiss
     public void saveInitialData(Submission submission) {
         submission.setStatus("Pending");
         this.save(submission);
+    }
+
+    /**
+     * 启动时 + 每30秒扫描一次 Pending 提交，补偿推送至 RabbitMQ
+     */
+    @PostConstruct
+    public void rescanPendingOnStartup() {
+        resendPendingSubmissions();
+    }
+
+    @Scheduled(fixedDelay = 30000)
+    public void resendPendingSubmissions() {
+        try {
+            java.util.List<Submission> pending = this.lambdaQuery()
+                    .eq(Submission::getStatus, "Pending")
+                    .or()
+                    .eq(Submission::getStatus, "JUDGING")
+                    .list();
+            for (Submission sub : pending) {
+                // 只重试提交时间在 2 小时以内的
+                if (sub.getSubmissionTime() != null) {
+                    long minutes = java.time.Duration.between(sub.getSubmissionTime(), java.time.LocalDateTime.now()).toMinutes();
+                    if (minutes > 120) continue;
+                }
+                try {
+                    JudgeMessage msg = JudgeMessage.builder()
+                            .submissionId(sub.getSubmissionId())
+                            .userId(sub.getUserId())
+                            .problemId(sub.getProblemId())
+                            .competitionId(sub.getCompetitionId())
+                            .codeContent(sub.getCodeContent())
+                            .language(sub.getLanguage())
+                            .build();
+                    judgeProducer.sendJudgeRequest(msg);
+                    log.info("补偿推送判题请求: submissionId={}", sub.getSubmissionId());
+                } catch (Exception e) {
+                    log.error("补偿推送失败: submissionId={}", sub.getSubmissionId(), e);
+                }
+            }
+        } catch (Exception e) {
+            log.error("扫描Pending提交失败", e);
+        }
     }
 
     /**
