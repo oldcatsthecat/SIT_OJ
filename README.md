@@ -52,6 +52,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/hosts
 
 ```
 git clone https://github.com/oldcatsthecat/SIT_OJ.git
+或者https://gitee.com/xiang-jiating/sit_-oj.git
 cd SIT_OJ
 chmod +x deploy.sh
 ./deploy.sh
@@ -63,6 +64,7 @@ chmod +x deploy.sh
 cd SIT_OJ
 ls | grep -v "^data$" | xargs rm -rf
 git clone https://github.com/oldcatsthecat/SIT_OJ.git ../SIT_OJ_TMP
+或者https://gitee.com/xiang-jiating/sit_-oj.git
 rsync -av --ignore-existing --exclude='.git' ../SIT_OJ_TMP/ ./
 rm -rf ../SIT_OJ_TMP
 ```
