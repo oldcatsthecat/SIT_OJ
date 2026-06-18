@@ -582,7 +582,11 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         long durationSec = comp.getStartTime() != null && comp.getEndTime() != null
                 ? java.time.Duration.between(comp.getStartTime(), comp.getEndTime()).toSeconds() : 0;
         String durationStr = String.format("%02d:%02d:%02d.000", durationSec / 3600, (durationSec % 3600) / 60, durationSec % 60);
-        int freezeSec = comp.getFreezeMinute() != null ? comp.getFreezeMinute() * 60 : 0;
+        // 计算真实封榜时长
+        long freezeSec = 0;
+        if (comp.getFreezeMinute() != null && comp.getFreezeMinute() > 0) {
+            freezeSec = comp.getFreezeMinute() * 60L;
+        }
         String freezeStr = String.format("%02d:%02d:%02d.000", freezeSec / 3600, (freezeSec % 3600) / 60, freezeSec % 60);
 
         StringBuilder sb = new StringBuilder();
@@ -722,10 +726,20 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             }
         } catch (Exception e) { log.error("导出提交失败", e); }
 
-        // state (end) — 只保留一个结束事件，finalized=null 允许 --test 模式
-        String freezeTime = (comp.getFreezeMinute() != null && comp.getFreezeMinute() > 0)
-                ? comp.getEndTime().minusMinutes(comp.getFreezeMinute()).format(tsFmt) + ".000+08:00" : endTime;
+        // state (end + frozen, finalized=null)
+        String freezeTime = endTime;
+        if (comp.getFreezeMinute() != null && comp.getFreezeMinute() > 0) {
+            java.time.LocalDateTime freezeStart = comp.getEndTime().minusMinutes(comp.getFreezeMinute());
+            freezeTime = freezeStart.format(tsFmt) + ".000+08:00";
+        }
+        int stateEndToken = token++;
         sb.append("{\"data\":{\"thawed\":null,\"finalized\":null,\"end_of_updates\":null,\"ended\":\"").append(endTime).append("\",")
+          .append("\"frozen\":\"").append(freezeTime).append("\",\"started\":\"").append(startTime).append("\"},")
+          .append("\"id\":null,\"time\":\"").append(endTime).append("\",\"type\":\"state\",\"token\":\"").append(stateEndToken).append("\"}\n");
+
+        // state (finalized) — ICPC Resolver 需要此事件才能正常排名
+        sb.append("{\"data\":{\"thawed\":null,\"finalized\":\"").append(endTime).append("\",")
+          .append("\"end_of_updates\":null,\"ended\":\"").append(endTime).append("\",")
           .append("\"frozen\":\"").append(freezeTime).append("\",\"started\":\"").append(startTime).append("\"},")
           .append("\"id\":null,\"time\":\"").append(endTime).append("\",\"type\":\"state\",\"token\":\"").append(token).append("\"}\n");
 
@@ -749,19 +763,7 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                 .replace("\n", "\\n").replace("\r", "\\r");
     }
 
-    private String formatDuration(LocalDateTime start, LocalDateTime end) {
-        long mins = java.time.Duration.between(start, end).toMinutes();
-        return String.format("%d:%02d:00", mins / 60, mins % 60);
-    }
 
-    private String formatFreezeDuration(Integer freezeMinute) {
-        if (freezeMinute == null || freezeMinute <= 0) return "0:00:00";
-        return String.format("%d:%02d:00", freezeMinute / 60, freezeMinute % 60);
-    }
-
-    private String formatContestTime(long minutes) {
-        return String.format("%d:%02d:00", minutes / 60, minutes % 60);
-    }
 
     private String mapStatus(String status) {
         if (status == null) return "WA";
