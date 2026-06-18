@@ -670,6 +670,22 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             }
         } catch (Exception e) { log.error("导出teams失败", e); }
 
+        // awards — 按队伍数缩放奖牌配额，确保铜牌≥1人（避免 Resolver lastBronze=0 崩溃）
+        int numTeams = parts.size();
+        int goldCount = Math.max(1, (int) Math.ceil(numTeams / 12.0));
+        int silverCount = Math.max(1, (int) Math.ceil(numTeams / 6.0));
+        int bronzeCount = Math.max(1, (int) Math.ceil(numTeams / 4.0));
+
+        sb.append("{\"data\":{\"parameters\":{\"numTeams\":\"").append(goldCount)
+          .append("\"},\"citation\":\"Gold Medal\",\"id\":\"gold-medal\",\"award_type\":\"MEDAL\"},")
+          .append("\"id\":\"gold-medal\",\"time\":\"").append(startTime).append("\",\"type\":\"awards\",\"token\":\"").append(token++).append("\"}\n");
+        sb.append("{\"data\":{\"parameters\":{\"numTeams\":\"").append(silverCount)
+          .append("\"},\"citation\":\"Silver Medal\",\"id\":\"silver-medal\",\"award_type\":\"MEDAL\"},")
+          .append("\"id\":\"silver-medal\",\"time\":\"").append(startTime).append("\",\"type\":\"awards\",\"token\":\"").append(token++).append("\"}\n");
+        sb.append("{\"data\":{\"parameters\":{\"numTeams\":\"").append(bronzeCount)
+          .append("\"},\"citation\":\"Bronze Medal\",\"id\":\"bronze-medal\",\"award_type\":\"MEDAL\"},")
+          .append("\"id\":\"bronze-medal\",\"time\":\"").append(startTime).append("\",\"type\":\"awards\",\"token\":\"").append(token++).append("\"}\n");
+
         // state (start)
         sb.append("{\"data\":{\"thawed\":null,\"finalized\":null,\"end_of_updates\":null,\"ended\":null,\"frozen\":null,\"started\":\"")
           .append(startTime).append("\"},\"id\":null,\"time\":\"").append(startTime).append("\",\"type\":\"state\",\"token\":\"").append(token++).append("\"}\n");
