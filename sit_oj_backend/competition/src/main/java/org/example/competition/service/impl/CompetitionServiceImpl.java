@@ -670,21 +670,43 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             }
         } catch (Exception e) { log.error("导出teams失败", e); }
 
-        // awards — 按队伍数缩放奖牌配额，确保铜牌≥1人（避免 Resolver lastBronze=0 崩溃）
+        // awards — 基于参与数据预分配奖牌队伍
+        // ICPC Resolver 在已有 awards 时会跳过 createDefaultAwards()，但也不会调用
+        // createMedalAwards() 来填充 team_ids。因此必须由我们预分配 team_ids，
+        // 否则 getLastBronze() 找到 teamIds=null → lastBronze=0 → order[-1] 崩溃。
         int numTeams = parts.size();
-        int goldCount = Math.max(1, (int) Math.ceil(numTeams / 12.0));
-        int silverCount = Math.max(1, (int) Math.ceil(numTeams / 6.0));
-        int bronzeCount = Math.max(1, (int) Math.ceil(numTeams / 4.0));
+        // 按 ACM 成绩排序
+        List<Participation> sorted = new ArrayList<>(parts);
+        sorted.sort((a, b) -> {
+            if (!a.getSolvedCount().equals(b.getSolvedCount()))
+                return b.getSolvedCount() - a.getSolvedCount();
+            return a.getTotalPenalty() - b.getTotalPenalty();
+        });
+        int goldCount = Math.max(1, (int) Math.ceil(numTeams * 0.10));
+        int silverCount = Math.max(1, (int) Math.ceil(numTeams * 0.20));
+        int bronzeCount = Math.max(1, (int) Math.ceil(numTeams * 0.30));
+        // 确保不超出队伍总数
+        goldCount = Math.min(goldCount, numTeams);
+        silverCount = Math.min(silverCount, numTeams - goldCount);
+        bronzeCount = Math.min(bronzeCount, numTeams - goldCount - silverCount);
 
-        sb.append("{\"data\":{\"parameters\":{\"numTeams\":\"").append(goldCount)
-          .append("\"},\"citation\":\"Gold Medal\",\"id\":\"gold-medal\",\"award_type\":\"MEDAL\"},")
-          .append("\"id\":\"gold-medal\",\"time\":\"").append(startTime).append("\",\"type\":\"awards\",\"token\":\"").append(token++).append("\"}\n");
-        sb.append("{\"data\":{\"parameters\":{\"numTeams\":\"").append(silverCount)
-          .append("\"},\"citation\":\"Silver Medal\",\"id\":\"silver-medal\",\"award_type\":\"MEDAL\"},")
-          .append("\"id\":\"silver-medal\",\"time\":\"").append(startTime).append("\",\"type\":\"awards\",\"token\":\"").append(token++).append("\"}\n");
-        sb.append("{\"data\":{\"parameters\":{\"numTeams\":\"").append(bronzeCount)
-          .append("\"},\"citation\":\"Bronze Medal\",\"id\":\"bronze-medal\",\"award_type\":\"MEDAL\"},")
-          .append("\"id\":\"bronze-medal\",\"time\":\"").append(startTime).append("\",\"type\":\"awards\",\"token\":\"").append(token++).append("\"}\n");
+        int idx2 = 0;
+        List<String> goldIds = new ArrayList<>();
+        for (int i = 0; i < goldCount; i++) goldIds.add(sorted.get(idx2++).getUserId().toString());
+        List<String> silverIds = new ArrayList<>();
+        for (int i = 0; i < silverCount; i++) silverIds.add(sorted.get(idx2++).getUserId().toString());
+        List<String> bronzeIds = new ArrayList<>();
+        for (int i = 0; i < bronzeCount; i++) bronzeIds.add(sorted.get(idx2++).getUserId().toString());
+
+        sb.append("{\"data\":{\"id\":\"gold-medal\",\"citation\":\"Gold Medal\",")
+          .append("\"team_ids\":[").append(goldIds.stream().map(s -> "\"" + s + "\"").collect(java.util.stream.Collectors.joining(","))).append("]")
+          .append("},\"id\":\"gold-medal\",\"time\":\"").append(startTime).append("\",\"type\":\"awards\",\"token\":\"").append(token++).append("\"}\n");
+        sb.append("{\"data\":{\"id\":\"silver-medal\",\"citation\":\"Silver Medal\",")
+          .append("\"team_ids\":[").append(silverIds.stream().map(s -> "\"" + s + "\"").collect(java.util.stream.Collectors.joining(","))).append("]")
+          .append("},\"id\":\"silver-medal\",\"time\":\"").append(startTime).append("\",\"type\":\"awards\",\"token\":\"").append(token++).append("\"}\n");
+        sb.append("{\"data\":{\"id\":\"bronze-medal\",\"citation\":\"Bronze Medal\",")
+          .append("\"team_ids\":[").append(bronzeIds.stream().map(s -> "\"" + s + "\"").collect(java.util.stream.Collectors.joining(","))).append("]")
+          .append("},\"id\":\"bronze-medal\",\"time\":\"").append(startTime).append("\",\"type\":\"awards\",\"token\":\"").append(token++).append("\"}\n");
 
         // state (start)
         sb.append("{\"data\":{\"thawed\":null,\"finalized\":null,\"end_of_updates\":null,\"ended\":null,\"frozen\":null,\"started\":\"")
