@@ -589,13 +589,16 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         int token = 0;
 
         // contest
-        sb.append("{\"data\":{\"penalty_time\":20,\"duration\":\"").append(durationStr)
-          .append("\",\"start_time\":\"").append(startTime)
-          .append("\",\"scoreboard_freeze_duration\":\"").append(freezeStr).append("\",")
-          .append("\"scoreboard_type\":\"pass-fail\",")
+        sb.append("{\"data\":{\"allow_submit\":true,\"end_time\":\"").append(endTime)
+          .append("\",\"runtime_as_score_tiebreaker\":null,\"shortname\":\"").append(competitionId)
+          .append("\",\"penalty_time\":20,\"duration\":\"").append(durationStr)
+          .append("\",\"warning_message\":null,\"start_time\":\"").append(startTime)
+          .append("\",\"scoreboard_thaw_time\":null,\"scoreboard_type\":\"pass-fail\",")
+          .append("\"scoreboard_freeze_duration\":\"").append(freezeStr).append("\",")
           .append("\"name\":\"").append(escapeJson(comp.getCompetitionName())).append("\",")
           .append("\"id\":\"").append(competitionId).append("\",")
-          .append("\"formal_name\":\"").append(escapeJson(comp.getCompetitionName())).append("\"},")
+          .append("\"formal_name\":\"").append(escapeJson(comp.getCompetitionName())).append("\",")
+          .append("\"cid\":").append(competitionId).append("},")
           .append("\"id\":null,\"time\":\"").append(startTime).append("\",\"type\":\"contest\",\"token\":\"").append(token++).append("\"}\n");
 
         // judgement-types
@@ -719,14 +722,10 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             }
         } catch (Exception e) { log.error("导出提交失败", e); }
 
-        // state (end, no finalized)
+        // state (end) — 只保留一个结束事件，finalized=null 允许 --test 模式
         String freezeTime = (comp.getFreezeMinute() != null && comp.getFreezeMinute() > 0)
                 ? comp.getEndTime().minusMinutes(comp.getFreezeMinute()).format(tsFmt) + ".000+08:00" : endTime;
         sb.append("{\"data\":{\"thawed\":null,\"finalized\":null,\"end_of_updates\":null,\"ended\":\"").append(endTime).append("\",")
-          .append("\"frozen\":\"").append(freezeTime).append("\",\"started\":\"").append(startTime).append("\"},")
-          .append("\"id\":null,\"time\":\"").append(endTime).append("\",\"type\":\"state\",\"token\":\"").append(token++).append("\"}\n");
-        // state (end, finalized) — Resolver uses this to confirm contest is over
-        sb.append("{\"data\":{\"thawed\":null,\"finalized\":\"").append(endTime).append("\",\"end_of_updates\":null,\"ended\":\"").append(endTime).append("\",")
           .append("\"frozen\":\"").append(freezeTime).append("\",\"started\":\"").append(startTime).append("\"},")
           .append("\"id\":null,\"time\":\"").append(endTime).append("\",\"type\":\"state\",\"token\":\"").append(token).append("\"}\n");
 
