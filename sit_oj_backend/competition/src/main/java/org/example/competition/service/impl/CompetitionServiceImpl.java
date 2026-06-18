@@ -323,29 +323,22 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         Competition comp = this.getById(competitionId);
         boolean isFrozen = comp != null && isInFreezePeriod(comp);
 
-        // 1. 先尝试从 Redis 获取排行榜
+        // 1. 先从 participations 获取全部参赛者（确保封榜后才提交的人也能显示在排行榜中）
+        List<Participation> allParts = participationMapper.selectList(
+                new LambdaQueryWrapper<Participation>()
+                        .eq(Participation::getCompetitionId, competitionId));
+        long totalParticipants = allParts.size();
+
+        // 2. 尝试从 Redis 获取排行榜
         try {
-            List<Map<String, Object>> redisRanks = rankingService.getRankList(competitionId, start, end);
+            List<Map<String, Object>> redisRanks = rankingService.getRankList(competitionId, 0, (int) totalParticipants);
             if (!redisRanks.isEmpty()) {
-                // 获取总参与人数
-                Long total = rankingService.getParticipantCount(competitionId);
+                // 构建 userId → Participation 映射
+                Map<Integer, Participation> partMap = allParts.stream()
+                        .collect(Collectors.toMap(Participation::getUserId, p -> p, (a, b) -> a));
 
-                // Redis 命中：用 userId 列表批量查询 MySQL
-                List<Integer> userIds = redisRanks.stream()
-                        .map(m -> (Integer) m.get("userId"))
-                        .toList();
-
-                List<Participation> participations = participationMapper.selectList(
-                        new LambdaQueryWrapper<Participation>()
-                                .eq(Participation::getCompetitionId, competitionId)
-                                .in(Participation::getUserId, userIds));
-
-                // 保持 Redis 的排名顺序
-                Map<Integer, Participation> partMap = participations.stream()
-                        .collect(Collectors.toMap(Participation::getUserId, p -> p));
-
-                // 通过 Feign 批量获取用户信息（用户名、真名），补齐排行榜展示字段
-                for (Participation p : participations) {
+                // 通过 Feign 批量获取用户信息
+                for (Participation p : allParts) {
                     try {
                         Map<String, Object> user = userFeignClient.getUserById(p.getUserId());
                         if (user != null && !user.isEmpty()) {
@@ -357,14 +350,24 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                     }
                 }
 
+                // 按 Redis 排名顺序排列有成绩的选手
+                java.util.Set<Integer> rankedUserIds = new java.util.HashSet<>();
                 List<Participation> ordered = new ArrayList<>();
                 for (Map<String, Object> rankItem : redisRanks) {
                     Integer uid = (Integer) rankItem.get("userId");
                     Participation p = partMap.get(uid);
                     if (p != null) {
                         ordered.add(p);
+                        rankedUserIds.add(uid);
                     }
                 }
+
+                // 追加未在 Redis 中的参赛者（封榜后首次提交或无提交者），按 userId 排序
+                List<Participation> unranked = allParts.stream()
+                        .filter(p -> !rankedUserIds.contains(p.getUserId()))
+                        .sorted(java.util.Comparator.comparingInt(Participation::getUserId))
+                        .toList();
+                ordered.addAll(unranked);
 
                 // 补全 submissionStats 详情
                 if (!ordered.isEmpty()) {
@@ -383,13 +386,18 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                     }
                 }
 
+                // 分页截取
+                int fromIndex = Math.min(start, ordered.size());
+                int toIndex = Math.min(start + size, ordered.size());
+                List<Participation> pageRecords = ordered.subList(fromIndex, toIndex);
+
                 Map<String, Object> result = new HashMap<>();
-                result.put("records", ordered);
-                result.put("total", total);
+                result.put("records", pageRecords);
+                result.put("total", totalParticipants);
                 result.put("isFrozen", isFrozen);
                 // 附加封榜期尝试次数（蓝底 +N 数据源）
                 Map<Integer, Map<Integer, Integer>> frozenMap = new HashMap<>();
-                for (Participation p : ordered) {
+                for (Participation p : pageRecords) {
                     Map<Integer, Integer> attempts = rankingService.getFreezeAttempts(competitionId, p.getUserId());
                     if (!attempts.isEmpty()) frozenMap.put(p.getUserId(), attempts);
                 }
