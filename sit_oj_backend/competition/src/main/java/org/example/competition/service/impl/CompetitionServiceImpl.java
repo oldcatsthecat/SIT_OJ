@@ -581,61 +581,75 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         String endTime = comp.getEndTime() != null ? comp.getEndTime().format(tsFmt) + ".000+08:00" : "";
         long durationSec = comp.getStartTime() != null && comp.getEndTime() != null
                 ? java.time.Duration.between(comp.getStartTime(), comp.getEndTime()).toSeconds() : 0;
-        String durationStr = String.format("%02d:%02d:%02d.000", durationSec / 3600, (durationSec % 3600) / 60, durationSec % 60);
-        // 计算真实封榜时长
+        // 时长格式与 contest_time 格式：小时不补零 (e.g. "0:11:00.000")
+        String durationStr = String.format("%d:%02d:%02d.000", durationSec / 3600, (durationSec % 3600) / 60, durationSec % 60);
         long freezeSec = 0;
         if (comp.getFreezeMinute() != null && comp.getFreezeMinute() > 0) {
             freezeSec = comp.getFreezeMinute() * 60L;
         }
-        String freezeStr = String.format("%02d:%02d:%02d.000", freezeSec / 3600, (freezeSec % 3600) / 60, freezeSec % 60);
+        String freezeStr = String.format("%d:%02d:%02d.000", freezeSec / 3600, (freezeSec % 3600) / 60, freezeSec % 60);
 
         StringBuilder sb = new StringBuilder();
-        int token = 0;
+        int token = 10; // 标准格式 token 从 cd10 开始
+
+        // 初始 state (空数据)
+        sb.append("{\"type\":\"state\",\"data\":{},\"token\":\"cd").append(token++).append("\"}\n");
 
         // contest
-        sb.append("{\"data\":{\"allow_submit\":true,\"end_time\":\"").append(endTime)
-          .append("\",\"runtime_as_score_tiebreaker\":null,\"shortname\":\"").append(competitionId)
-          .append("\",\"penalty_time\":20,\"duration\":\"").append(durationStr)
-          .append("\",\"warning_message\":null,\"start_time\":\"").append(startTime)
-          .append("\",\"scoreboard_thaw_time\":null,\"scoreboard_type\":\"pass-fail\",")
-          .append("\"scoreboard_freeze_duration\":\"").append(freezeStr).append("\",")
-          .append("\"name\":\"").append(escapeJson(comp.getCompetitionName())).append("\",")
+        sb.append("{\"type\":\"contest\",\"id\":\"").append(competitionId).append("\",\"data\":{")
           .append("\"id\":\"").append(competitionId).append("\",")
+          .append("\"name\":\"").append(escapeJson(comp.getCompetitionName())).append("\",")
           .append("\"formal_name\":\"").append(escapeJson(comp.getCompetitionName())).append("\",")
-          .append("\"cid\":").append(competitionId).append("},")
-          .append("\"id\":null,\"time\":\"").append(startTime).append("\",\"type\":\"contest\",\"token\":\"").append(token++).append("\"}\n");
+          .append("\"start_time\":\"").append(startTime).append("\",")
+          .append("\"duration\":\"").append(durationStr).append("\",")
+          .append("\"scoreboard_freeze_duration\":\"").append(freezeStr).append("\",")
+          .append("\"scoreboard_type\":\"pass-fail\",")
+          .append("\"penalty_time\":20")
+          .append("},\"token\":\"cd").append(token++).append("\"}\n");
 
         // judgement-types
         String[][] jts = {{"AC","correct","false"},{"CE","compiler error","false"},{"MLE","memory limit","true"},
                           {"OLE","output limit","true"},{"PE","presentation error","true"},{"RTE","run error","true"},
                           {"TLE","timelimit","true"},{"WA","wrong answer","true"}};
         for (String[] jt : jts) {
-            sb.append("{\"data\":{\"penalty\":").append(jt[2]).append(",\"name\":\"").append(jt[1])
-              .append("\",\"solved\":").append(jt[0].equals("AC")?"true":"false").append(",\"id\":\"").append(jt[0]).append("\"},")
-              .append("\"id\":\"").append(jt[0]).append("\",\"time\":\"").append(startTime).append("\",\"type\":\"judgement-types\",\"token\":\"").append(token++).append("\"}\n");
+            sb.append("{\"type\":\"judgement-types\",\"id\":\"").append(jt[0]).append("\",\"data\":{")
+              .append("\"id\":\"").append(jt[0]).append("\",")
+              .append("\"name\":\"").append(jt[1]).append("\",")
+              .append("\"penalty\":").append(jt[2]).append(",")
+              .append("\"solved\":").append(jt[0].equals("AC") ? "true" : "false")
+              .append("},\"token\":\"cd").append(token++).append("\"}\n");
         }
 
         // languages
         String[][] langs = {{"c","C"},{"cpp","C++"},{"java","Java"},{"python","Python 3"}};
         for (String[] l : langs) {
-            sb.append("{\"data\":{\"extensions\":[\"").append(l[0]).append("\"],\"allow_judge\":true,\"name\":\"").append(l[1])
-              .append("\",\"id\":\"").append(l[0]).append("\",\"time_factor\":1.0,\"entry_point_required\":false,\"entry_point_name\":null},")
-              .append("\"id\":\"").append(l[0]).append("\",\"time\":\"").append(startTime).append("\",\"type\":\"languages\",\"token\":\"").append(token++).append("\"}\n");
+            sb.append("{\"type\":\"languages\",\"id\":\"").append(l[0]).append("\",\"data\":{")
+              .append("\"id\":\"").append(l[0]).append("\",")
+              .append("\"name\":\"").append(l[1]).append("\",")
+              .append("\"entry_point_required\":false,")
+              .append("\"extensions\":[\"").append(l[0]).append("\"]")
+              .append("},\"token\":\"cd").append(token++).append("\"}\n");
         }
 
         // problems
         int ord = 1;
         for (Map.Entry<Integer, String> e : problemLabels.entrySet()) {
-            sb.append("{\"data\":{\"attachments\":[],\"color\":null,\"time_limit\":1.0,\"statement\":[],\"name\":\"")
-              .append(e.getValue()).append("\",\"probid\":").append(e.getKey()).append(",\"label\":\"").append(e.getValue())
-              .append("\",\"id\":\"").append(e.getValue()).append("\",\"test_data_count\":1,\"rgb\":null,\"shortname\":\"").append(e.getValue())
-              .append("\",\"ordinal\":").append(ord++).append("},")
-              .append("\"id\":\"").append(e.getValue()).append("\",\"time\":\"").append(startTime).append("\",\"type\":\"problems\",\"token\":\"").append(token++).append("\"}\n");
+            sb.append("{\"type\":\"problems\",\"id\":\"").append(e.getValue()).append("\",\"data\":{")
+              .append("\"id\":\"").append(e.getValue()).append("\",")
+              .append("\"label\":\"").append(e.getValue()).append("\",")
+              .append("\"name\":\"").append(e.getValue()).append("\",")
+              .append("\"ordinal\":").append(ord++).append(",")
+              .append("\"test_data_count\":1,")
+              .append("\"time_limit\":1,")
+              .append("\"statement\":[],")
+              .append("\"attachments\":[]")
+              .append("},\"token\":\"cd").append(token++).append("\"}\n");
         }
 
         // groups
-        sb.append("{\"data\":{\"hidden\":false,\"color\":null,\"name\":\"participants\",\"sortorder\":0,\"id\":\"participants\",\"icpc_id\":null,\"allow_self_registration\":false,\"categoryid\":1},")
-          .append("\"id\":\"participants\",\"time\":\"").append(startTime).append("\",\"type\":\"groups\",\"token\":\"").append(token++).append("\"}\n");
+        sb.append("{\"type\":\"groups\",\"id\":\"participants\",\"data\":{")
+          .append("\"id\":\"participants\",\"name\":\"participants\"")
+          .append("},\"token\":\"cd").append(token++).append("\"}\n");
 
         // organizations & teams & accounts
         try {
@@ -643,39 +657,46 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             for (Participation p : parts) {
                 Map<String, Object> user = null;
                 try { user = userFeignClient.getUserById(p.getUserId()); } catch (Exception ignored) {}
-                String orgName = "SIT";
-                if (user != null && user.get("realName") != null) orgName = "上海应用技术大学";
+                String orgName = "上海应用技术大学";
+                String orgId = escapeJson(orgName);
                 if (!orgNames.containsKey(orgName)) {
-                    sb.append("{\"data\":{\"country\":\"CHN\",\"affilid\":\"").append(escapeJson(orgName)).append("\",\"name\":\"").append(escapeJson(orgName))
-                      .append("\",\"id\":\"").append(escapeJson(orgName)).append("\",\"icpc_id\":\"").append(escapeJson(orgName))
-                      .append("\",\"shortname\":\"").append(escapeJson(orgName)).append("\",\"formal_name\":\"").append(escapeJson(orgName)).append("\"},")
-                      .append("\"id\":\"").append(escapeJson(orgName)).append("\",\"time\":\"").append(startTime).append("\",\"type\":\"organizations\",\"token\":\"").append(token++).append("\"}\n");
+                    sb.append("{\"type\":\"organizations\",\"id\":\"").append(orgId).append("\",\"data\":{")
+                      .append("\"id\":\"").append(orgId).append("\",")
+                      .append("\"icpc_id\":\"").append(orgId).append("\",")
+                      .append("\"name\":\"").append(orgId).append("\",")
+                      .append("\"formal_name\":\"").append(orgId).append("\",")
+                      .append("\"country\":\"CHN\"")
+                      .append("},\"token\":\"cd").append(token++).append("\"}\n");
                     orgNames.put(orgName, "");
                 }
                 String teamName = user != null ? (String) user.getOrDefault("realName",
                         user.getOrDefault("username", "User" + p.getUserId())) : "User" + p.getUserId();
                 if (teamName == null || teamName.isEmpty()) teamName = "User" + p.getUserId();
-                sb.append("{\"data\":{\"hidden\":false,\"nationality\":\"CHN\",\"affiliation\":\"").append(escapeJson(orgName))
-                  .append("\",\"organization_id\":\"").append(escapeJson(orgName)).append("\",\"teamid\":").append(p.getUserId())
-                  .append(",\"group_ids\":[\"participants\"],\"name\":\"").append(escapeJson(teamName))
-                  .append("\",\"id\":\"").append(p.getUserId()).append("\",\"icpc_id\":\"").append(p.getUserId())
-                  .append("\",\"label\":\"").append(p.getUserId()).append("\",\"display_name\":\"").append(escapeJson(teamName)).append("\"},")
-                  .append("\"id\":\"").append(p.getUserId()).append("\",\"time\":\"").append(startTime).append("\",\"type\":\"teams\",\"token\":\"").append(token++).append("\"}\n");
+                String teamNameEsc = escapeJson(teamName);
+                String uid = p.getUserId().toString();
 
-                sb.append("{\"data\":{\"last_ip\":null,\"last_login_time\":null,\"roles\":[\"team\"],\"ip\":null,\"team\":\"").append(escapeJson(teamName))
-                  .append("\",\"team_id\":\"").append(p.getUserId()).append("\",\"type\":\"team\",\"userid\":").append(p.getUserId())
-                  .append(",\"enabled\":true,\"name\":\"").append(escapeJson(teamName)).append("\",\"last_api_login_time\":null,\"id\":\"").append(p.getUserId())
-                  .append("\",\"first_login_time\":null,\"email\":null,\"username\":\"").append(p.getUserId()).append("\"},")
-                  .append("\"id\":\"").append(p.getUserId()).append("\",\"time\":\"").append(startTime).append("\",\"type\":\"accounts\",\"token\":\"").append(token++).append("\"}\n");
+                sb.append("{\"type\":\"teams\",\"id\":\"").append(uid).append("\",\"data\":{")
+                  .append("\"id\":\"").append(uid).append("\",")
+                  .append("\"label\":\"").append(uid).append("\",")
+                  .append("\"name\":\"").append(teamNameEsc).append("\",")
+                  .append("\"display_name\":\"").append(teamNameEsc).append("\",")
+                  .append("\"icpc_id\":\"").append(uid).append("\",")
+                  .append("\"group_ids\":[\"participants\"],")
+                  .append("\"organization_id\":\"").append(orgId).append("\"")
+                  .append("},\"token\":\"cd").append(token++).append("\"}\n");
+
+                sb.append("{\"type\":\"accounts\",\"id\":\"").append(uid).append("\",\"data\":{")
+                  .append("\"id\":\"").append(uid).append("\",")
+                  .append("\"name\":\"").append(teamNameEsc).append("\",")
+                  .append("\"username\":\"").append(uid).append("\",")
+                  .append("\"type\":\"team\",")
+                  .append("\"team_id\":\"").append(uid).append("\"")
+                  .append("},\"token\":\"cd").append(token++).append("\"}\n");
             }
         } catch (Exception e) { log.error("导出teams失败", e); }
 
-        // awards — 基于参与数据预分配奖牌队伍
-        // ICPC Resolver 在已有 awards 时会跳过 createDefaultAwards()，但也不会调用
-        // createMedalAwards() 来填充 team_ids。因此必须由我们预分配 team_ids，
-        // 否则 getLastBronze() 找到 teamIds=null → lastBronze=0 → order[-1] 崩溃。
+        // 按 ACM 成绩排序队伍用于奖牌分配
         int numTeams = parts.size();
-        // 按 ACM 成绩排序
         List<Participation> sorted = new ArrayList<>(parts);
         sorted.sort((a, b) -> {
             if (!a.getSolvedCount().equals(b.getSolvedCount()))
@@ -685,36 +706,34 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         int goldCount = Math.max(1, (int) Math.ceil(numTeams * 0.10));
         int silverCount = Math.max(1, (int) Math.ceil(numTeams * 0.20));
         int bronzeCount = Math.max(1, (int) Math.ceil(numTeams * 0.30));
-        // 确保不超出队伍总数
         goldCount = Math.min(goldCount, numTeams);
         silverCount = Math.min(silverCount, numTeams - goldCount);
         bronzeCount = Math.min(bronzeCount, numTeams - goldCount - silverCount);
 
-        int idx2 = 0;
+        int rankIdx = 0;
         List<String> goldIds = new ArrayList<>();
-        for (int i = 0; i < goldCount; i++) goldIds.add(sorted.get(idx2++).getUserId().toString());
+        for (int i = 0; i < goldCount; i++) goldIds.add(sorted.get(rankIdx++).getUserId().toString());
         List<String> silverIds = new ArrayList<>();
-        for (int i = 0; i < silverCount; i++) silverIds.add(sorted.get(idx2++).getUserId().toString());
+        for (int i = 0; i < silverCount; i++) silverIds.add(sorted.get(rankIdx++).getUserId().toString());
         List<String> bronzeIds = new ArrayList<>();
-        for (int i = 0; i < bronzeCount; i++) bronzeIds.add(sorted.get(idx2++).getUserId().toString());
+        for (int i = 0; i < bronzeCount; i++) bronzeIds.add(sorted.get(rankIdx++).getUserId().toString());
 
-        sb.append("{\"data\":{\"id\":\"gold-medal\",\"citation\":\"Gold Medal\",")
-          .append("\"team_ids\":[").append(goldIds.stream().map(s -> "\"" + s + "\"").collect(java.util.stream.Collectors.joining(","))).append("]")
-          .append("},\"id\":\"gold-medal\",\"time\":\"").append(startTime).append("\",\"type\":\"awards\",\"token\":\"").append(token++).append("\"}\n");
-        sb.append("{\"data\":{\"id\":\"silver-medal\",\"citation\":\"Silver Medal\",")
-          .append("\"team_ids\":[").append(silverIds.stream().map(s -> "\"" + s + "\"").collect(java.util.stream.Collectors.joining(","))).append("]")
-          .append("},\"id\":\"silver-medal\",\"time\":\"").append(startTime).append("\",\"type\":\"awards\",\"token\":\"").append(token++).append("\"}\n");
-        sb.append("{\"data\":{\"id\":\"bronze-medal\",\"citation\":\"Bronze Medal\",")
-          .append("\"team_ids\":[").append(bronzeIds.stream().map(s -> "\"" + s + "\"").collect(java.util.stream.Collectors.joining(","))).append("]")
-          .append("},\"id\":\"bronze-medal\",\"time\":\"").append(startTime).append("\",\"type\":\"awards\",\"token\":\"").append(token++).append("\"}\n");
-
-        // state (start)
-        sb.append("{\"data\":{\"thawed\":null,\"finalized\":null,\"end_of_updates\":null,\"ended\":null,\"frozen\":null,\"started\":\"")
-          .append(startTime).append("\"},\"id\":null,\"time\":\"").append(startTime).append("\",\"type\":\"state\",\"token\":\"").append(token++).append("\"}\n");
+        // state (started)
+        sb.append("{\"type\":\"state\",\"data\":{\"started\":\"").append(startTime)
+          .append("\"},\"token\":\"cd").append(token++).append("\"}\n");
 
         // submissions & judgements & runs
         try {
             List<Map<String, Object>> rawSubs = getCompetitionSubmissionsForExport(competitionId);
+            // 按 contest_time 排序
+            rawSubs.sort((a, b) -> {
+                Object ta = a.get("submissionTime");
+                Object tb = b.get("submissionTime");
+                if (ta == null && tb == null) return 0;
+                if (ta == null) return -1;
+                if (tb == null) return 1;
+                return ta.toString().compareTo(tb.toString());
+            });
             for (Map<String, Object> sub : rawSubs) {
                 Integer subId = (Integer) sub.get("submissionId");
                 Integer uid = (Integer) sub.get("userId");
@@ -728,61 +747,158 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                     subTime = java.time.LocalDateTime.parse(((String) timeObj).replace("T", " ").substring(0, 19),
                             java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
                 } else {
-                    subTime = comp.getStartTime(); // fallback
+                    subTime = comp.getStartTime();
                 }
                 long contestMs = java.time.Duration.between(comp.getStartTime(), subTime).toMillis();
-                String cTime = String.format("%02d:%02d:%02d.%03d", contestMs / 3600000, (contestMs % 3600000) / 60000, (contestMs % 60000) / 1000, contestMs % 1000);
+                String cTime = String.format("%d:%02d:%02d.%03d", contestMs / 3600000, (contestMs % 3600000) / 60000, (contestMs % 60000) / 1000, contestMs % 1000);
                 String subTimeStr = subTime != null ? subTime.format(tsFmt) + ".000+08:00" : startTime;
 
                 double runTime = 0.003;
                 try { Object tc = sub.get("timeCost"); if (tc instanceof Number) runTime = ((Number) tc).doubleValue() / 1000.0; } catch (Exception ignored) {}
 
+                String jt = mapStatus(status);
+
                 // submission
-                sb.append("{\"data\":{\"problem_id\":\"").append(probLabel).append("\",\"files\":[{\"filename\":\"submission.zip\",\"mime\":\"application/zip\",\"href\":\"contests/submissions/").append(subId).append("/files\"}],")
-                  .append("\"import_error\":null,\"language_id\":\"").append(lang).append("\",\"time\":\"").append(subTimeStr).append("\",")
-                  .append("\"contest_time\":\"").append(cTime).append("\",\"team_id\":\"").append(uid).append("\",\"id\":\"").append(subId).append("\",")
-                  .append("\"entry_point\":null,\"submitid\":").append(subId).append("},")
-                  .append("\"id\":\"").append(subId).append("\",\"time\":\"").append(subTimeStr).append("\",\"type\":\"submissions\",\"token\":\"").append(token++).append("\"}\n");
+                sb.append("{\"type\":\"submissions\",\"id\":\"").append(subId).append("\",\"data\":{")
+                  .append("\"id\":\"").append(subId).append("\",")
+                  .append("\"problem_id\":\"").append(probLabel).append("\",")
+                  .append("\"team_id\":\"").append(uid).append("\",")
+                  .append("\"language_id\":\"").append(lang).append("\",")
+                  .append("\"files\":[{\"href\":\"contests/submissions/").append(subId).append("/files\",")
+                  .append("\"filename\":\"submission.zip\",\"mime\":\"application/zip\"}],")
+                  .append("\"contest_time\":\"").append(cTime).append("\",")
+                  .append("\"time\":\"").append(subTimeStr).append("\"")
+                  .append("},\"token\":\"cd").append(token++).append("\"}\n");
 
                 // judgement (pending)
-                sb.append("{\"data\":{\"valid\":true,\"start_time\":\"").append(subTimeStr).append("\",\"submission_id\":\"").append(subId).append("\",")
-                  .append("\"end_contest_time\":null,\"end_time\":null,\"start_contest_time\":\"").append(cTime).append("\",\"id\":\"").append(subId).append("\",")
-                  .append("\"max_run_time\":null,\"judgement_type_id\":null},")
-                  .append("\"id\":\"").append(subId).append("\",\"time\":\"").append(subTimeStr).append("\",\"type\":\"judgements\",\"token\":\"").append(token++).append("\"}\n");
+                sb.append("{\"type\":\"judgements\",\"id\":\"").append(subId).append("\",\"data\":{")
+                  .append("\"id\":\"").append(subId).append("\",")
+                  .append("\"submission_id\":\"").append(subId).append("\",")
+                  .append("\"start_contest_time\":\"").append(cTime).append("\",")
+                  .append("\"start_time\":\"").append(subTimeStr).append("\"")
+                  .append("},\"token\":\"cd").append(token++).append("\"}\n");
 
                 // run
-                String jt = mapStatus(status);
-                sb.append("{\"data\":{\"run_time\":").append(runTime).append(",\"time\":\"").append(subTimeStr).append("\",\"contest_time\":\"").append(cTime).append("\",")
-                  .append("\"id\":\"").append(subId).append("\",\"judgement_id\":\"").append(subId).append("\",\"judgement_type_id\":\"").append(jt).append("\",\"ordinal\":1},")
-                  .append("\"id\":\"").append(subId).append("\",\"time\":\"").append(subTimeStr).append("\",\"type\":\"runs\",\"token\":\"").append(token++).append("\"}\n");
+                sb.append("{\"type\":\"runs\",\"id\":\"").append(subId).append("\",\"data\":{")
+                  .append("\"id\":\"").append(subId).append("\",")
+                  .append("\"judgement_id\":\"").append(subId).append("\",")
+                  .append("\"judgement_type_id\":\"").append(jt).append("\",")
+                  .append("\"ordinal\":1,")
+                  .append("\"run_time\":").append(runTime).append(",")
+                  .append("\"contest_time\":\"").append(cTime).append("\",")
+                  .append("\"time\":\"").append(subTimeStr).append("\"")
+                  .append("},\"token\":\"cd").append(token++).append("\"}\n");
 
                 // judgement (final)
-                sb.append("{\"data\":{\"valid\":true,\"start_time\":\"").append(subTimeStr).append("\",\"submission_id\":\"").append(subId).append("\",")
-                  .append("\"end_contest_time\":\"").append(cTime).append("\",\"end_time\":\"").append(subTimeStr).append("\",\"start_contest_time\":\"").append(cTime).append("\",")
-                  .append("\"id\":\"").append(subId).append("\",\"max_run_time\":").append(runTime).append(",\"judgement_type_id\":\"").append(jt).append("\"},")
-                  .append("\"id\":\"").append(subId).append("\",\"time\":\"").append(subTimeStr).append("\",\"type\":\"judgements\",\"token\":\"").append(token++).append("\"}\n");
+                sb.append("{\"type\":\"judgements\",\"id\":\"").append(subId).append("\",\"data\":{")
+                  .append("\"id\":\"").append(subId).append("\",")
+                  .append("\"submission_id\":\"").append(subId).append("\",")
+                  .append("\"judgement_type_id\":\"").append(jt).append("\",")
+                  .append("\"max_run_time\":").append(runTime).append(",")
+                  .append("\"start_contest_time\":\"").append(cTime).append("\",")
+                  .append("\"start_time\":\"").append(subTimeStr).append("\",")
+                  .append("\"end_contest_time\":\"").append(cTime).append("\",")
+                  .append("\"end_time\":\"").append(subTimeStr).append("\"")
+                  .append("},\"token\":\"cd").append(token++).append("\"}\n");
             }
         } catch (Exception e) { log.error("导出提交失败", e); }
 
-        // state (end + frozen, finalized=null, end_of_updates=end)
-        // end_of_updates 必须设置，否则 Resolver.isDoneUpdating() 返回 false
+        // freeze time
         String freezeTime = endTime;
         if (comp.getFreezeMinute() != null && comp.getFreezeMinute() > 0) {
             java.time.LocalDateTime freezeStart = comp.getEndTime().minusMinutes(comp.getFreezeMinute());
             freezeTime = freezeStart.format(tsFmt) + ".000+08:00";
         }
-        int stateEndToken = token++;
-        sb.append("{\"data\":{\"thawed\":null,\"finalized\":null,\"end_of_updates\":\"").append(endTime).append("\",")
-          .append("\"ended\":\"").append(endTime).append("\",")
-          .append("\"frozen\":\"").append(freezeTime).append("\",\"started\":\"").append(startTime).append("\"},")
-          .append("\"id\":null,\"time\":\"").append(endTime).append("\",\"type\":\"state\",\"token\":\"").append(stateEndToken).append("\"}\n");
 
-        // state (finalized) — ICPC Resolver 需要此事件才能正常排名
-        sb.append("{\"data\":{\"thawed\":null,\"finalized\":\"").append(endTime).append("\",")
-          .append("\"end_of_updates\":\"").append(endTime).append("\",")
+        // state (ended + frozen + end_of_updates)
+        sb.append("{\"type\":\"state\",\"data\":{")
+          .append("\"started\":\"").append(startTime).append("\",")
           .append("\"ended\":\"").append(endTime).append("\",")
-          .append("\"frozen\":\"").append(freezeTime).append("\",\"started\":\"").append(startTime).append("\"},")
-          .append("\"id\":null,\"time\":\"").append(endTime).append("\",\"type\":\"state\",\"token\":\"").append(token).append("\"}\n");
+          .append("\"frozen\":\"").append(freezeTime).append("\",")
+          .append("\"end_of_updates\":\"").append(endTime).append("\"")
+          .append("},\"token\":\"cd").append(token++).append("\"}\n");
+
+        // state (finalized)
+        sb.append("{\"type\":\"state\",\"data\":{")
+          .append("\"started\":\"").append(startTime).append("\",")
+          .append("\"ended\":\"").append(endTime).append("\",")
+          .append("\"frozen\":\"").append(freezeTime).append("\",")
+          .append("\"finalized\":\"").append(endTime).append("\",")
+          .append("\"end_of_updates\":\"").append(endTime).append("\"")
+          .append("},\"token\":\"cd").append(token++).append("\"}\n");
+
+        // awards — 标准格式: type→id→data→token, parameters 为空对象
+        // winner
+        if (!goldIds.isEmpty()) {
+            sb.append("{\"type\":\"awards\",\"id\":\"winner\",\"data\":{")
+              .append("\"id\":\"winner\",")
+              .append("\"team_ids\":[\"").append(goldIds.get(0)).append("\"],")
+              .append("\"citation\":\"Champion\",")
+              .append("\"parameters\":{}")
+              .append("},\"token\":\"cd").append(token++).append("\"}\n");
+        }
+
+        // first-to-solve (按提交时间找每题第一个 AC)
+        try {
+            List<Map<String, Object>> allSubs = getCompetitionSubmissionsForExport(competitionId);
+            allSubs.sort((a, b) -> {
+                Object ta = a.get("submissionTime");
+                Object tb = b.get("submissionTime");
+                if (ta == null && tb == null) return 0;
+                if (ta == null) return -1;
+                if (tb == null) return 1;
+                return ta.toString().compareTo(tb.toString());
+            });
+            java.util.Set<String> ftsDone = new java.util.HashSet<>();
+            for (Map<String, Object> sub : allSubs) {
+                String st = (String) sub.get("status");
+                if (!"AC".equalsIgnoreCase(st) && !"ACCEPTED".equalsIgnoreCase(st)) continue;
+                Integer ftsPid = (Integer) sub.get("problemId");
+                String label = problemLabels.get(ftsPid);
+                if (label == null || ftsDone.contains(label)) continue;
+                ftsDone.add(label);
+                Integer ftsUid = (Integer) sub.get("userId");
+                sb.append("{\"type\":\"awards\",\"id\":\"first-to-solve-").append(label).append("\",\"data\":{")
+                  .append("\"id\":\"first-to-solve-").append(label).append("\",")
+                  .append("\"team_ids\":[\"").append(ftsUid).append("\"],")
+                  .append("\"citation\":\"First to solve problem ").append(label).append("\",")
+                  .append("\"parameters\":{}")
+                  .append("},\"token\":\"cd").append(token++).append("\"}\n");
+            }
+        } catch (Exception e) { log.error("导出 first-to-solve 失败", e); }
+
+        // bronze-medal
+        sb.append("{\"type\":\"awards\",\"id\":\"bronze-medal\",\"data\":{")
+          .append("\"id\":\"bronze-medal\",")
+          .append("\"team_ids\":[");
+        for (int i = 0; i < bronzeIds.size(); i++) {
+            if (i > 0) sb.append(",");
+            sb.append("\"").append(bronzeIds.get(i)).append("\"");
+        }
+        sb.append("],\"citation\":\"Bronze Medalist\",\"parameters\":{}")
+          .append("},\"token\":\"cd").append(token++).append("\"}\n");
+
+        // silver-medal
+        sb.append("{\"type\":\"awards\",\"id\":\"silver-medal\",\"data\":{")
+          .append("\"id\":\"silver-medal\",")
+          .append("\"team_ids\":[");
+        for (int i = 0; i < silverIds.size(); i++) {
+            if (i > 0) sb.append(",");
+            sb.append("\"").append(silverIds.get(i)).append("\"");
+        }
+        sb.append("],\"citation\":\"Silver Medalist\",\"parameters\":{}")
+          .append("},\"token\":\"cd").append(token++).append("\"}\n");
+
+        // gold-medal
+        sb.append("{\"type\":\"awards\",\"id\":\"gold-medal\",\"data\":{")
+          .append("\"id\":\"gold-medal\",")
+          .append("\"team_ids\":[");
+        for (int i = 0; i < goldIds.size(); i++) {
+            if (i > 0) sb.append(",");
+            sb.append("\"").append(goldIds.get(i)).append("\"");
+        }
+        sb.append("],\"citation\":\"Gold Medalist\",\"parameters\":{}")
+          .append("},\"token\":\"cd").append(token++).append("\"}\n");
 
         return sb.toString();
     }
