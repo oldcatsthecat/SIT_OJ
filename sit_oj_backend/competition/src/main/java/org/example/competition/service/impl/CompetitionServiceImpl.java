@@ -160,11 +160,13 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateAcmStats(Integer userId, Integer competitionId, Integer problemId, String status) {
+        log.info("ACM_STATS_CALLED: userId={} compId={} probId={} status={}", userId, competitionId, problemId, status);
         Competition comp = this.getById(competitionId);
-        if (comp == null) return;
+        if (comp == null) { log.warn("ACM_STATS_COMP_NULL: compId={}", competitionId); return; }
 
         boolean isAc = "AC".equalsIgnoreCase(status) || "ACCEPTED".equalsIgnoreCase(status);
         boolean frozen = isInFreezePeriod(comp);
+        log.info("ACM_STATS_FROZEN_CHECK: compId={} freezeMinute={} isFrozen={}", competitionId, comp.getFreezeMinute(), frozen);
         int currentMinute = (int) java.time.Duration.between(comp.getStartTime(), LocalDateTime.now()).toMinutes();
 
         // 查 stats 记录
@@ -186,22 +188,11 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
 
         if (stats.getIsAc()) return;
 
-        // 封榜期间：只更新尝试次数，AC / participations / Redis 排名分数 全部冻结
+        // 封榜期间：不写 MySQL stats，AC 隐藏，所有提交仅记录到 Redis 供前端蓝底 +N 显示
         if (frozen) {
-            log.info("FROZEN_UPDATE: userId={} compId={} probId={} status={} isAc={} isNew={} curWA={}",
-                    userId, competitionId, problemId, status, isAc, isNew, stats.getWrongAttempts());
-            if (!isAc && !"CE".equalsIgnoreCase(status)) {
-                stats.setWrongAttempts(stats.getWrongAttempts() + 1);
-                if (isNew) statsMapper.insert(stats);
-                else statsMapper.update(stats, new LambdaUpdateWrapper<CompetitionSubmissionStats>()
-                        .eq(CompetitionSubmissionStats::getUserId, userId)
-                        .eq(CompetitionSubmissionStats::getCompetitionId, competitionId)
-                        .eq(CompetitionSubmissionStats::getProblemId, problemId));
-                log.info("FROZEN_SAVED: isNew={} newWA={}", isNew, stats.getWrongAttempts());
-                try { rankingService.setProblemStatus(competitionId, userId, problemId, "Frozen"); }
-                catch (Exception e) { log.error("封榜期同步尝试次数失败", e); }
-            } else {
-                log.info("FROZEN_SKIP: status={} (AC or CE)", status);
+            if (!"CE".equalsIgnoreCase(status)) {
+                rankingService.incrFreezeAttempt(competitionId, userId, problemId);
+                log.info("FROZEN_INCR: userId={} compId={} probId={} status={}", userId, competitionId, problemId, status);
             }
             return;
         }
@@ -396,6 +387,13 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                 result.put("records", ordered);
                 result.put("total", total);
                 result.put("isFrozen", isFrozen);
+                // 附加封榜期尝试次数（蓝底 +N 数据源）
+                Map<Integer, Map<Integer, Integer>> frozenMap = new HashMap<>();
+                for (Participation p : ordered) {
+                    Map<Integer, Integer> attempts = rankingService.getFreezeAttempts(competitionId, p.getUserId());
+                    if (!attempts.isEmpty()) frozenMap.put(p.getUserId(), attempts);
+                }
+                result.put("frozenAttempts", frozenMap);
                 return result;
             }
         } catch (Exception e) {
@@ -430,6 +428,12 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         result.put("records", ranklist);
         result.put("total", page.getTotal());
         result.put("isFrozen", isFrozen);
+        Map<Integer, Map<Integer, Integer>> frozenMap2 = new HashMap<>();
+        for (Participation p : ranklist) {
+            Map<Integer, Integer> attempts = rankingService.getFreezeAttempts(competitionId, p.getUserId());
+            if (!attempts.isEmpty()) frozenMap2.put(p.getUserId(), attempts);
+        }
+        result.put("frozenAttempts", frozenMap2);
         return result;
     }
 
@@ -533,6 +537,9 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         comp.setFreezeMinute(0);
         this.updateById(comp);
 
+        // 2.5 清空封榜期 Redis 尝试计数
+        rankingService.clearFreezeAttempts(competitionId);
+
         // 3. 重建 Redis 排名
         try {
             List<Participation> all = participationMapper.selectList(
@@ -582,16 +589,14 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         int token = 0;
 
         // contest
-        sb.append("{\"data\":{\"allow_submit\":true,\"end_time\":\"").append(endTime).append("\",")
-          .append("\"runtime_as_score_tiebreaker\":null,\"shortname\":\"").append(competitionId).append("\",")
-          .append("\"penalty_time\":20,\"duration\":\"").append(durationStr).append("\",")
-          .append("\"warning_message\":null,\"start_time\":\"").append(startTime).append("\",")
-          .append("\"scoreboard_thaw_time\":null,\"scoreboard_type\":\"pass-fail\",")
+        sb.append("{\"data\":{\"penalty_time\":20,\"duration\":\"").append(durationStr).append("\",")
+          .append("\"start_time\":\"").append(startTime).append("\",")
           .append("\"scoreboard_freeze_duration\":\"").append(freezeStr).append("\",")
+          .append("\"scoreboard_type\":\"pass-fail\",")
           .append("\"name\":\"").append(escapeJson(comp.getCompetitionName())).append("\",")
           .append("\"id\":\"").append(competitionId).append("\",")
           .append("\"formal_name\":\"").append(escapeJson(comp.getCompetitionName())).append("\",")
-          .append("\"cid\":").append(competitionId).append("},")
+          .append("\"shortname\":\"").append(competitionId).append("\"},")
           .append("\"id\":null,\"time\":\"").append(startTime).append("\",\"type\":\"contest\",\"token\":\"").append(token++).append("\"}\n");
 
         // judgement-types

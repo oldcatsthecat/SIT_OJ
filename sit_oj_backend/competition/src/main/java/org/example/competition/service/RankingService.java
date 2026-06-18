@@ -21,8 +21,9 @@ public class RankingService {
 
     private final RedisTemplate<String, Object> redisTemplate;
 
-    private static final String RANK_KEY_PREFIX  = "competition:rank:";
-    private static final String STATS_KEY_PREFIX = "competition:stats:";
+    private static final String RANK_KEY_PREFIX   = "competition:rank:";
+    private static final String STATS_KEY_PREFIX  = "competition:stats:";
+    private static final String FREEZE_KEY_PREFIX = "competition:freeze:";
 
     // ==================== 排行榜操作 ====================
 
@@ -98,5 +99,30 @@ public class RankingService {
     public boolean isProblemAccepted(Integer competitionId, Integer userId, Integer problemId) {
         String status = getProblemStatus(competitionId, userId, problemId);
         return "AC".equalsIgnoreCase(status);
+    }
+
+    // ==================== 封榜期尝试次数 ====================
+
+    /** 封榜期间记录一次提交尝试 */
+    public void incrFreezeAttempt(Integer competitionId, Integer userId, Integer problemId) {
+        String key = FREEZE_KEY_PREFIX + competitionId + ":" + userId;
+        redisTemplate.opsForHash().increment(key, problemId.toString(), 1);
+        redisTemplate.expire(key, Duration.ofHours(48));
+    }
+
+    /** 获取封榜期间某用户的每题尝试次数 {problemId -> count} */
+    public Map<Integer, Integer> getFreezeAttempts(Integer competitionId, Integer userId) {
+        String key = FREEZE_KEY_PREFIX + competitionId + ":" + userId;
+        Map<Object, Object> raw = redisTemplate.opsForHash().entries(key);
+        Map<Integer, Integer> result = new HashMap<>();
+        raw.forEach((k, v) -> result.put(Integer.parseInt(k.toString()), Integer.parseInt(v.toString())));
+        return result;
+    }
+
+    /** 清空封榜尝试数据（解封后调用） */
+    public void clearFreezeAttempts(Integer competitionId) {
+        String pattern = FREEZE_KEY_PREFIX + competitionId + ":*";
+        Set<String> keys = redisTemplate.keys(pattern);
+        if (keys != null && !keys.isEmpty()) redisTemplate.delete(keys);
     }
 }
