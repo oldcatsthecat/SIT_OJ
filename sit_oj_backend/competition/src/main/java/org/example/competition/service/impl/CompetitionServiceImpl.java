@@ -726,20 +726,23 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             }
         } catch (Exception e) { log.error("导出提交失败", e); }
 
-        // state (end + frozen, finalized=null)
+        // state (end + frozen, finalized=null, end_of_updates=end)
+        // end_of_updates 必须设置，否则 Resolver.isDoneUpdating() 返回 false
         String freezeTime = endTime;
         if (comp.getFreezeMinute() != null && comp.getFreezeMinute() > 0) {
             java.time.LocalDateTime freezeStart = comp.getEndTime().minusMinutes(comp.getFreezeMinute());
             freezeTime = freezeStart.format(tsFmt) + ".000+08:00";
         }
         int stateEndToken = token++;
-        sb.append("{\"data\":{\"thawed\":null,\"finalized\":null,\"end_of_updates\":null,\"ended\":\"").append(endTime).append("\",")
+        sb.append("{\"data\":{\"thawed\":null,\"finalized\":null,\"end_of_updates\":\"").append(endTime).append("\",")
+          .append("\"ended\":\"").append(endTime).append("\",")
           .append("\"frozen\":\"").append(freezeTime).append("\",\"started\":\"").append(startTime).append("\"},")
           .append("\"id\":null,\"time\":\"").append(endTime).append("\",\"type\":\"state\",\"token\":\"").append(stateEndToken).append("\"}\n");
 
         // state (finalized) — ICPC Resolver 需要此事件才能正常排名
         sb.append("{\"data\":{\"thawed\":null,\"finalized\":\"").append(endTime).append("\",")
-          .append("\"end_of_updates\":null,\"ended\":\"").append(endTime).append("\",")
+          .append("\"end_of_updates\":\"").append(endTime).append("\",")
+          .append("\"ended\":\"").append(endTime).append("\",")
           .append("\"frozen\":\"").append(freezeTime).append("\",\"started\":\"").append(startTime).append("\"},")
           .append("\"id\":null,\"time\":\"").append(endTime).append("\",\"type\":\"state\",\"token\":\"").append(token).append("\"}\n");
 
