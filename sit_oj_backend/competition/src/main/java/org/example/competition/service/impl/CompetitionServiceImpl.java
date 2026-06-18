@@ -188,6 +188,8 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
 
         // 封榜期间：只更新尝试次数，AC / participations / Redis 排名分数 全部冻结
         if (frozen) {
+            log.info("封榜期更新尝试次数: userId={}, compId={}, problemId={}, status={}, isAc={}, wrongAttempts={}",
+                    userId, competitionId, problemId, status, isAc, stats.getWrongAttempts() + 1);
             if (!isAc && !"CE".equalsIgnoreCase(status)) {
                 stats.setWrongAttempts(stats.getWrongAttempts() + 1);
                 if (isNew) statsMapper.insert(stats);
@@ -195,9 +197,11 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                         .eq(CompetitionSubmissionStats::getUserId, userId)
                         .eq(CompetitionSubmissionStats::getCompetitionId, competitionId)
                         .eq(CompetitionSubmissionStats::getProblemId, problemId));
-                // 同步 Redis 尝试次数（供排行榜格子显示 Frozen + 尝试次数）
+                log.info("封榜期 stats 已写入: isNew={}, wrongAttempts={}", isNew, stats.getWrongAttempts());
                 try { rankingService.setProblemStatus(competitionId, userId, problemId, "Frozen"); }
                 catch (Exception e) { log.error("封榜期同步尝试次数失败", e); }
+            } else {
+                log.info("封榜期跳过(AC或CE): status={}", status);
             }
             return;
         }
@@ -710,9 +714,9 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             }
         } catch (Exception e) { log.error("导出提交失败", e); }
 
-        // state (end)
+        // state (end) — finalized 必须设值，否则 Resolver 认为比赛未结束
         String freezeTime = comp.getFreezeMinute() != null && comp.getFreezeMinute() > 0 ? endTime : startTime;
-        sb.append("{\"data\":{\"thawed\":null,\"finalized\":null,\"end_of_updates\":null,\"ended\":\"").append(endTime).append("\",")
+        sb.append("{\"data\":{\"thawed\":null,\"finalized\":\"").append(endTime).append("\",\"end_of_updates\":null,\"ended\":\"").append(endTime).append("\",")
           .append("\"frozen\":\"").append(freezeTime).append("\",\"started\":\"").append(startTime).append("\"},")
           .append("\"id\":null,\"time\":\"").append(endTime).append("\",\"type\":\"state\",\"token\":\"").append(token).append("\"}\n");
 
