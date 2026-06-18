@@ -565,8 +565,9 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             problemLabels.put(pid, String.valueOf((char) ('A' + idx++)));
         }
 
-        String startTime = comp.getStartTime() != null ? comp.getStartTime().toString() + ".000+08:00" : "";
-        String endTime = comp.getEndTime() != null ? comp.getEndTime().toString() + ".000+08:00" : "";
+        java.time.format.DateTimeFormatter tsFmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+        String startTime = comp.getStartTime() != null ? comp.getStartTime().format(tsFmt) + ".000+08:00" : "";
+        String endTime = comp.getEndTime() != null ? comp.getEndTime().format(tsFmt) + ".000+08:00" : "";
         long durationSec = comp.getStartTime() != null && comp.getEndTime() != null
                 ? java.time.Duration.between(comp.getStartTime(), comp.getEndTime()).toSeconds() : 0;
         String durationStr = String.format("%02d:%02d:%02d.000", durationSec / 3600, (durationSec % 3600) / 60, durationSec % 60);
@@ -677,7 +678,7 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                 }
                 long contestMs = java.time.Duration.between(comp.getStartTime(), subTime).toMillis();
                 String cTime = String.format("%02d:%02d:%02d.%03d", contestMs / 3600000, (contestMs % 3600000) / 60000, (contestMs % 60000) / 1000, contestMs % 1000);
-                String subTimeStr = subTime != null ? subTime.toString() + ".000+08:00" : startTime;
+                String subTimeStr = subTime != null ? subTime.format(tsFmt) + ".000+08:00" : startTime;
 
                 double runTime = 0.003;
                 try { Object tc = sub.get("timeCost"); if (tc instanceof Number) runTime = ((Number) tc).doubleValue() / 1000.0; } catch (Exception ignored) {}
