@@ -589,16 +589,13 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         int token = 0;
 
         // contest
-        sb.append("{\"data\":{\"allow_submit\":true,\"end_time\":\"").append(endTime)
-          .append("\",\"runtime_as_score_tiebreaker\":null,\"shortname\":\"").append(competitionId)
-          .append("\",\"penalty_time\":20,\"duration\":\"").append(durationStr)
-          .append("\",\"warning_message\":null,\"start_time\":\"").append(startTime)
-          .append("\",\"scoreboard_thaw_time\":null,\"scoreboard_type\":\"pass-fail\",")
-          .append("\"scoreboard_freeze_duration\":\"").append(freezeStr).append("\",")
+        sb.append("{\"data\":{\"penalty_time\":20,\"duration\":\"").append(durationStr)
+          .append("\",\"start_time\":\"").append(startTime)
+          .append("\",\"scoreboard_freeze_duration\":\"").append(freezeStr).append("\",")
+          .append("\"scoreboard_type\":\"pass-fail\",")
           .append("\"name\":\"").append(escapeJson(comp.getCompetitionName())).append("\",")
           .append("\"id\":\"").append(competitionId).append("\",")
-          .append("\"formal_name\":\"").append(escapeJson(comp.getCompetitionName())).append("\",")
-          .append("\"cid\":").append(competitionId).append("},")
+          .append("\"formal_name\":\"").append(escapeJson(comp.getCompetitionName())).append("\"},")
           .append("\"id\":null,\"time\":\"").append(startTime).append("\",\"type\":\"contest\",\"token\":\"").append(token++).append("\"}\n");
 
         // judgement-types
