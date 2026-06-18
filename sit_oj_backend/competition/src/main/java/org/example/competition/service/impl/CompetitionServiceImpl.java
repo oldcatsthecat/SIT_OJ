@@ -589,23 +589,25 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         int token = 0;
 
         // contest
-        sb.append("{\"data\":{\"penalty_time\":20,\"duration\":\"").append(durationStr).append("\",")
-          .append("\"start_time\":\"").append(startTime).append("\",")
+        sb.append("{\"data\":{\"allow_submit\":true,\"end_time\":\"").append(endTime)
+          .append("\",\"runtime_as_score_tiebreaker\":null,\"shortname\":\"").append(competitionId)
+          .append("\",\"penalty_time\":20,\"duration\":\"").append(durationStr)
+          .append("\",\"warning_message\":null,\"start_time\":\"").append(startTime)
+          .append("\",\"scoreboard_thaw_time\":null,\"scoreboard_type\":\"pass-fail\",")
           .append("\"scoreboard_freeze_duration\":\"").append(freezeStr).append("\",")
-          .append("\"scoreboard_type\":\"pass-fail\",")
           .append("\"name\":\"").append(escapeJson(comp.getCompetitionName())).append("\",")
           .append("\"id\":\"").append(competitionId).append("\",")
           .append("\"formal_name\":\"").append(escapeJson(comp.getCompetitionName())).append("\",")
-          .append("\"shortname\":\"").append(competitionId).append("\"},")
+          .append("\"cid\":").append(competitionId).append("},")
           .append("\"id\":null,\"time\":\"").append(startTime).append("\",\"type\":\"contest\",\"token\":\"").append(token++).append("\"}\n");
 
         // judgement-types
-        String[][] jts = {{"AC","correct", "true"},{"CE","compiler error","false"},{"MLE","memory limit","false"},
-                          {"OLE","output limit","false"},{"PE","presentation error","false"},{"RTE","run error","false"},
-                          {"TLE","timelimit","false"},{"WA","wrong answer","false"}};
+        String[][] jts = {{"AC","correct","false"},{"CE","compiler error","false"},{"MLE","memory limit","true"},
+                          {"OLE","output limit","true"},{"PE","presentation error","true"},{"RTE","run error","true"},
+                          {"TLE","timelimit","true"},{"WA","wrong answer","true"}};
         for (String[] jt : jts) {
-            sb.append("{\"data\":{\"penalty\":").append(jt[1].equals("wrong answer")||jt[1].equals("timelimit")||jt[1].equals("run error")||jt[1].equals("memory limit")||jt[1].equals("output limit")||jt[1].equals("presentation error")?"true":"false")
-              .append(",\"name\":\"").append(jt[1]).append("\",\"solved\":").append(jt[2]).append(",\"id\":\"").append(jt[0]).append("\"},")
+            sb.append("{\"data\":{\"penalty\":").append(jt[2]).append(",\"name\":\"").append(jt[1])
+              .append("\",\"solved\":").append(jt[0].equals("AC")?"true":"false").append(",\"id\":\"").append(jt[0]).append("\"},")
               .append("\"id\":\"").append(jt[0]).append("\",\"time\":\"").append(startTime).append("\",\"type\":\"judgement-types\",\"token\":\"").append(token++).append("\"}\n");
         }
 
@@ -646,8 +648,9 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                       .append("\"id\":\"").append(escapeJson(orgName)).append("\",\"time\":\"").append(startTime).append("\",\"type\":\"organizations\",\"token\":\"").append(token++).append("\"}\n");
                     orgNames.put(orgName, "");
                 }
-                String teamName = user != null ? (String) user.getOrDefault("realName", user.getOrDefault("username", "User" + p.getUserId())) : "User" + p.getUserId();
-                if (teamName == null) teamName = "User" + p.getUserId();
+                String teamName = user != null ? (String) user.getOrDefault("realName",
+                        user.getOrDefault("username", "User" + p.getUserId())) : "User" + p.getUserId();
+                if (teamName == null || teamName.isEmpty()) teamName = "User" + p.getUserId();
                 sb.append("{\"data\":{\"hidden\":false,\"nationality\":\"CHN\",\"affiliation\":\"").append(escapeJson(orgName))
                   .append("\",\"organization_id\":\"").append(escapeJson(orgName)).append("\",\"teamid\":").append(p.getUserId())
                   .append(",\"group_ids\":[\"participants\"],\"name\":\"").append(escapeJson(teamName))
@@ -719,9 +722,13 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             }
         } catch (Exception e) { log.error("导出提交失败", e); }
 
-        // state (end) — finalized 必须设值，否则 Resolver 认为比赛未结束
-        // frozen=endTime 表示封榜时长为0（与 scoreboard_freeze_duration 呼应）
-        String freezeTime = comp.getFreezeMinute() != null && comp.getFreezeMinute() > 0 ? endTime : endTime;
+        // state (end, no finalized)
+        String freezeTime = (comp.getFreezeMinute() != null && comp.getFreezeMinute() > 0)
+                ? comp.getEndTime().minusMinutes(comp.getFreezeMinute()).format(tsFmt) + ".000+08:00" : endTime;
+        sb.append("{\"data\":{\"thawed\":null,\"finalized\":null,\"end_of_updates\":null,\"ended\":\"").append(endTime).append("\",")
+          .append("\"frozen\":\"").append(freezeTime).append("\",\"started\":\"").append(startTime).append("\"},")
+          .append("\"id\":null,\"time\":\"").append(endTime).append("\",\"type\":\"state\",\"token\":\"").append(token++).append("\"}\n");
+        // state (end, finalized) — Resolver uses this to confirm contest is over
         sb.append("{\"data\":{\"thawed\":null,\"finalized\":\"").append(endTime).append("\",\"end_of_updates\":null,\"ended\":\"").append(endTime).append("\",")
           .append("\"frozen\":\"").append(freezeTime).append("\",\"started\":\"").append(startTime).append("\"},")
           .append("\"id\":null,\"time\":\"").append(endTime).append("\",\"type\":\"state\",\"token\":\"").append(token).append("\"}\n");
@@ -763,11 +770,15 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
     private String mapStatus(String status) {
         if (status == null) return "WA";
         String s = status.toUpperCase();
-        if (s.contains("AC")) return "AC";
+        if (s.contains("AC") || s.contains("ACCEPT")) return "AC";
         if (s.contains("WA") || s.contains("WRONG")) return "WA";
-        if (s.contains("TLE")) return "TLE";
+        if (s.contains("TLE") || s.contains("TIME")) return "TLE";
         if (s.contains("CE") || s.contains("COMPILE")) return "CE";
         if (s.contains("RE") || s.contains("RUNTIME")) return "RTE";
+        if (s.contains("MLE") || s.contains("MEMORY")) return "MLE";
+        if (s.contains("OLE") || s.contains("OUTPUT")) return "OLE";
+        if (s.contains("PE") || s.contains("PRESENT")) return "PE";
+        if (s.contains("SE") || s.contains("SYSTEM") || s.contains("ERROR")) return "RTE";
         return "WA";
     }
 
