@@ -53,11 +53,12 @@ spring:
           predicates:
             - Path=/users/**,/admin/**
 
-      # 全局跨域配置 (让前端 5173 能够访问网关)
-      globalcors:
-        add-to-simple-url-handler-mapping: true
-        cors-configurations:
-          '[/**]':
-            allowedOrigins: "*" # 允许所有来源（生产环境建议指定具体域名）
-            allowedMethods: "*"
-            allowedHeaders: "*"
+      # 生产环境通过 Nginx 反向代理（/api/* → gateway），前后端同源，无需 CORS
+      # 本地开发如需跨域，取消下方注释：
+      # globalcors:
+      #   add-to-simple-url-handler-mapping: true
+      #   cors-configurations:
+      #     '[/**]':
+      #       allowedOrigins: "http://localhost:5173"
+      #       allowedMethods: "*"
+      #       allowedHeaders: "*"
