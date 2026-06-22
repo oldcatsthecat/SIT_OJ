@@ -47,11 +47,22 @@ public class JudgeResultConsumer {
 
             // 2. 如果是比赛提交，回调 Competition 模块更新 ACM 分数
             if (result.getCompetitionId() != null) {
+                // 查询提交时间，用于封榜判断（提交时间 vs 封榜开始时间）
+                String submissionTime = "";
+                try {
+                    Submission fullSub = submissionService.getById(result.getSubmissionId());
+                    if (fullSub != null && fullSub.getSubmissionTime() != null) {
+                        submissionTime = fullSub.getSubmissionTime().toString();
+                    }
+                } catch (Exception e) {
+                    log.warn("获取提交时间失败: submissionId={}", result.getSubmissionId(), e);
+                }
                 competitionFeignClient.updateRankStats(
                         result.getUserId(),
                         result.getCompetitionId(),
                         result.getProblemId(),
-                        result.getStatus()
+                        result.getStatus(),
+                        submissionTime
                 );
             }
 

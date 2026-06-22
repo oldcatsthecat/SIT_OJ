@@ -94,8 +94,9 @@ public class CompetitionController {
     public Result updateRankStats(@RequestParam Integer userId,
                                                                  @RequestParam Integer competitionId,
                                                                  @RequestParam Integer problemId,
-                                                                 @RequestParam String status) {
-        competitionService.updateAcmStats(userId, competitionId, problemId, status);
+                                                                 @RequestParam String status,
+                                                                 @RequestParam String submissionTime) {
+        competitionService.updateAcmStats(userId, competitionId, problemId, status, submissionTime);
         return Result.success();
     }
 

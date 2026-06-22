@@ -21,7 +21,8 @@ public interface CompetitionFeignClient {
     Result updateRankStats(@RequestParam("userId") Integer userId,
                            @RequestParam("competitionId") Integer competitionId,
                            @RequestParam("problemId") Integer problemId,
-                           @RequestParam("status") String status);
+                           @RequestParam("status") String status,
+                           @RequestParam("submissionTime") String submissionTime);
 
     /**
      * 检查比赛是否处于封榜期

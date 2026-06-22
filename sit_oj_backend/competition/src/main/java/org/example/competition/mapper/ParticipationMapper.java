@@ -19,6 +19,8 @@ public interface ParticipationMapper extends BaseMapper<Participation> {
     @Select("SELECT p.*, u.username , u.real_name FROM participations p " +
             "JOIN users u ON p.user_id = u.id " +
             "WHERE p.competition_id = #{competitionId} " +
+            "AND EXISTS (SELECT 1 FROM competition_submission_stats s " +
+            "WHERE s.user_id = p.user_id AND s.competition_id = p.competition_id) " +
             "ORDER BY p.solved_count DESC, p.total_penalty ASC")
     List<Participation> getRanklist(Integer competitionId);
 
@@ -28,6 +30,8 @@ public interface ParticipationMapper extends BaseMapper<Participation> {
     @Select("SELECT p.*, u.username , u.real_name FROM participations p " +
             "JOIN users u ON p.user_id = u.id " +
             "WHERE p.competition_id = #{competitionId} " +
+            "AND EXISTS (SELECT 1 FROM competition_submission_stats s " +
+            "WHERE s.user_id = p.user_id AND s.competition_id = p.competition_id) " +
             "ORDER BY p.solved_count DESC, p.total_penalty ASC")
     IPage<Participation> getRanklistPage(Page<Participation> page, Integer competitionId);
 }

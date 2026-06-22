@@ -18,7 +18,7 @@ public class CompetitionFeignClientFallback implements FallbackFactory<Competiti
         return new CompetitionFeignClient() {
             @Override
             public Result updateRankStats(Integer userId, Integer competitionId,
-                                          Integer problemId, String status) {
+                                          Integer problemId, String status, String submissionTime) {
                 log.warn("CompetitionFeignClient 降级: 排行榜更新延迟, competition={}, user={}",
                         competitionId, userId);
                 return Result.error("比赛服务暂时不可用，排行榜将延迟更新");

@@ -159,15 +159,27 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void updateAcmStats(Integer userId, Integer competitionId, Integer problemId, String status) {
+    public void updateAcmStats(Integer userId, Integer competitionId, Integer problemId, String status, String submissionTimeStr) {
         log.info("ACM_STATS_CALLED: userId={} compId={} probId={} status={}", userId, competitionId, problemId, status);
         Competition comp = this.getById(competitionId);
         if (comp == null) { log.warn("ACM_STATS_COMP_NULL: compId={}", competitionId); return; }
 
+        // 解析提交时间
+        java.time.LocalDateTime submissionTime;
+        try {
+            submissionTime = java.time.LocalDateTime.parse(submissionTimeStr.replace("T", " ").substring(0, 19),
+                    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        } catch (Exception e) {
+            log.warn("解析提交时间失败，fallback 到当前时间: {}", submissionTimeStr, e);
+            submissionTime = LocalDateTime.now();
+        }
+
         boolean isAc = "AC".equalsIgnoreCase(status) || "ACCEPTED".equalsIgnoreCase(status);
-        boolean frozen = isInFreezePeriod(comp);
-        log.info("ACM_STATS_FROZEN_CHECK: compId={} freezeMinute={} isFrozen={}", competitionId, comp.getFreezeMinute(), frozen);
-        int currentMinute = (int) java.time.Duration.between(comp.getStartTime(), LocalDateTime.now()).toMinutes();
+        // 用提交时间而非当前时间判断封榜：避免"封榜前提交、封榜后出结果"被错误拦截
+        boolean frozen = isInFreezePeriod(comp, submissionTime);
+        log.info("ACM_STATS_FROZEN_CHECK: compId={} freezeMinute={} isFrozen={} submitTime={}",
+                competitionId, comp.getFreezeMinute(), frozen, submissionTime);
+        int currentMinute = (int) java.time.Duration.between(comp.getStartTime(), submissionTime).toMinutes();
 
         // 查 stats 记录
         CompetitionSubmissionStats stats = statsMapper.selectOne(new LambdaQueryWrapper<CompetitionSubmissionStats>()
@@ -193,6 +205,19 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             if (!"CE".equalsIgnoreCase(status)) {
                 rankingService.incrFreezeAttempt(competitionId, userId, problemId);
                 log.info("FROZEN_INCR: userId={} compId={} probId={} status={}", userId, competitionId, problemId, status);
+            }
+            // 即使封榜，也确保用户在 Redis ZSET 中存在（新参赛者首次提交时 score=0）
+            try {
+                Participation participation = participationMapper.selectOne(
+                        new LambdaQueryWrapper<Participation>()
+                                .eq(Participation::getUserId, userId)
+                                .eq(Participation::getCompetitionId, competitionId));
+                if (participation != null) {
+                    rankingService.updateRank(competitionId, userId,
+                            participation.getSolvedCount(), participation.getTotalPenalty());
+                }
+            } catch (Exception e) {
+                log.error("封榜期间同步用户到 Redis 失败: userId={}", userId, e);
             }
             return;
         }
@@ -302,15 +327,22 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
     }
 
     /**
-     * 判断比赛当前是否处于封榜期（结束前 freezeMinute 分钟 ~ 结束时刻）
+     * 判断比赛当前是否处于封榜期（用当前时间）
      */
     private boolean isInFreezePeriod(Competition comp) {
+        return isInFreezePeriod(comp, LocalDateTime.now());
+    }
+
+    /**
+     * 判断比赛在某个时间点是否处于封榜期
+     * 用提交时间而非当前时间，避免"封榜前提交、封榜后判完"被错误当作封榜期提交
+     */
+    private boolean isInFreezePeriod(Competition comp, LocalDateTime time) {
         if (comp.getFreezeMinute() == null || comp.getFreezeMinute() <= 0) return false;
         if (comp.getEndTime() == null) return false;
         LocalDateTime freezeStart = comp.getEndTime().minusMinutes(comp.getFreezeMinute());
-        LocalDateTime now = LocalDateTime.now();
         // 封榜持续到管理员手动解封，不随比赛结束自动解榜
-        return now.isAfter(freezeStart);
+        return time.isAfter(freezeStart);
     }
 
 
@@ -323,22 +355,30 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         Competition comp = this.getById(competitionId);
         boolean isFrozen = comp != null && isInFreezePeriod(comp);
 
-        // 1. 先从 participations 获取全部参赛者（确保封榜后才提交的人也能显示在排行榜中）
-        List<Participation> allParts = participationMapper.selectList(
+        // 从 MySQL 获取总参赛人数（兜底用）
+        Long totalFromDb = participationMapper.selectCount(
                 new LambdaQueryWrapper<Participation>()
                         .eq(Participation::getCompetitionId, competitionId));
-        long totalParticipants = allParts.size();
 
-        // 2. 尝试从 Redis 获取排行榜
+        // 1. 尝试从 Redis 获取排行榜（分页）
         try {
-            List<Map<String, Object>> redisRanks = rankingService.getRankList(competitionId, 0, (int) totalParticipants);
+            List<Map<String, Object>> redisRanks = rankingService.getRankList(competitionId, start, end);
             if (!redisRanks.isEmpty()) {
-                // 构建 userId → Participation 映射
-                Map<Integer, Participation> partMap = allParts.stream()
-                        .collect(Collectors.toMap(Participation::getUserId, p -> p, (a, b) -> a));
+                Long redisTotal = rankingService.getParticipantCount(competitionId);
+                long total = Math.max(redisTotal != null ? redisTotal : 0, totalFromDb);
 
-                // 通过 Feign 批量获取用户信息
-                for (Participation p : allParts) {
+                List<Integer> userIds = redisRanks.stream()
+                        .map(m -> (Integer) m.get("userId")).toList();
+
+                // 查 participations + 填充用户信息
+                List<Participation> participations = participationMapper.selectList(
+                        new LambdaQueryWrapper<Participation>()
+                                .eq(Participation::getCompetitionId, competitionId)
+                                .in(Participation::getUserId, userIds));
+                Map<Integer, Participation> partMap = participations.stream()
+                        .collect(Collectors.toMap(Participation::getUserId, p -> p));
+
+                for (Participation p : participations) {
                     try {
                         Map<String, Object> user = userFeignClient.getUserById(p.getUserId());
                         if (user != null && !user.isEmpty()) {
@@ -350,54 +390,36 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                     }
                 }
 
-                // 按 Redis 排名顺序排列有成绩的选手
-                java.util.Set<Integer> rankedUserIds = new java.util.HashSet<>();
-                List<Participation> ordered = new ArrayList<>();
+                // 保持 Redis 排名顺序
+                List<Participation> records = new ArrayList<>();
                 for (Map<String, Object> rankItem : redisRanks) {
                     Integer uid = (Integer) rankItem.get("userId");
                     Participation p = partMap.get(uid);
-                    if (p != null) {
-                        ordered.add(p);
-                        rankedUserIds.add(uid);
-                    }
+                    if (p != null) records.add(p);
                 }
 
-                // 追加未在 Redis 中的参赛者（封榜后首次提交或无提交者），按 userId 排序
-                List<Participation> unranked = allParts.stream()
-                        .filter(p -> !rankedUserIds.contains(p.getUserId()))
-                        .sorted(java.util.Comparator.comparingInt(Participation::getUserId))
-                        .toList();
-                ordered.addAll(unranked);
-
-                // 补全 submissionStats 详情
-                if (!ordered.isEmpty()) {
-                    List<Integer> orderedUserIds = ordered.stream().map(Participation::getUserId).toList();
+                // 补全 submissionStats
+                if (!records.isEmpty()) {
+                    List<Integer> recordUserIds = records.stream().map(Participation::getUserId).toList();
                     List<CompetitionSubmissionStats> allStats = statsMapper.selectList(
                             new LambdaQueryWrapper<CompetitionSubmissionStats>()
                                     .eq(CompetitionSubmissionStats::getCompetitionId, competitionId)
-                                    .in(CompetitionSubmissionStats::getUserId, orderedUserIds));
+                                    .in(CompetitionSubmissionStats::getUserId, recordUserIds));
                     Map<Integer, List<CompetitionSubmissionStats>> statsByUser = allStats.stream()
                             .collect(Collectors.groupingBy(CompetitionSubmissionStats::getUserId));
-                    for (Participation p : ordered) {
+                    for (Participation p : records) {
                         List<CompetitionSubmissionStats> userStats = statsByUser.getOrDefault(p.getUserId(), new ArrayList<>());
-                        Map<Integer, CompetitionSubmissionStats> statMap = userStats.stream()
-                                .collect(Collectors.toMap(CompetitionSubmissionStats::getProblemId, s -> s));
-                        p.setSubmissionStats(statMap);
+                        p.setSubmissionStats(userStats.stream()
+                                .collect(Collectors.toMap(CompetitionSubmissionStats::getProblemId, s -> s)));
                     }
                 }
 
-                // 分页截取
-                int fromIndex = Math.min(start, ordered.size());
-                int toIndex = Math.min(start + size, ordered.size());
-                List<Participation> pageRecords = ordered.subList(fromIndex, toIndex);
-
                 Map<String, Object> result = new HashMap<>();
-                result.put("records", pageRecords);
-                result.put("total", totalParticipants);
+                result.put("records", records);
+                result.put("total", total);
                 result.put("isFrozen", isFrozen);
-                // 附加封榜期尝试次数（蓝底 +N 数据源）
                 Map<Integer, Map<Integer, Integer>> frozenMap = new HashMap<>();
-                for (Participation p : pageRecords) {
+                for (Participation p : records) {
                     Map<Integer, Integer> attempts = rankingService.getFreezeAttempts(competitionId, p.getUserId());
                     if (!attempts.isEmpty()) frozenMap.put(p.getUserId(), attempts);
                 }
@@ -408,7 +430,7 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             log.error("Redis 排行榜读取失败，降级到 MySQL", e);
         }
 
-        // 2. Redis 未命中或异常 → 降级查 MySQL（分页）
+        // 2. Redis 未命中 → 降级 MySQL 分页
         Page<Participation> pageParam = new Page<>(current, size);
         IPage<Participation> page = participationMapper.getRanklistPage(pageParam, competitionId);
         List<Participation> ranklist = page.getRecords();
@@ -418,17 +440,13 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             List<CompetitionSubmissionStats> allStats = statsMapper.selectList(
                     new LambdaQueryWrapper<CompetitionSubmissionStats>()
                             .eq(CompetitionSubmissionStats::getCompetitionId, competitionId)
-                            .in(CompetitionSubmissionStats::getUserId, userIds)
-            );
-
+                            .in(CompetitionSubmissionStats::getUserId, userIds));
             Map<Integer, List<CompetitionSubmissionStats>> statsByUser = allStats.stream()
                     .collect(Collectors.groupingBy(CompetitionSubmissionStats::getUserId));
-
             for (Participation p : ranklist) {
                 List<CompetitionSubmissionStats> userStats = statsByUser.getOrDefault(p.getUserId(), new ArrayList<>());
-                Map<Integer, CompetitionSubmissionStats> statMap = userStats.stream()
-                        .collect(Collectors.toMap(CompetitionSubmissionStats::getProblemId, s -> s));
-                p.setSubmissionStats(statMap);
+                p.setSubmissionStats(userStats.stream()
+                        .collect(Collectors.toMap(CompetitionSubmissionStats::getProblemId, s -> s)));
             }
         }
 
@@ -436,12 +454,12 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         result.put("records", ranklist);
         result.put("total", page.getTotal());
         result.put("isFrozen", isFrozen);
-        Map<Integer, Map<Integer, Integer>> frozenMap2 = new HashMap<>();
+        Map<Integer, Map<Integer, Integer>> frozenMap = new HashMap<>();
         for (Participation p : ranklist) {
             Map<Integer, Integer> attempts = rankingService.getFreezeAttempts(competitionId, p.getUserId());
-            if (!attempts.isEmpty()) frozenMap2.put(p.getUserId(), attempts);
+            if (!attempts.isEmpty()) frozenMap.put(p.getUserId(), attempts);
         }
-        result.put("frozenAttempts", frozenMap2);
+        result.put("frozenAttempts", frozenMap);
         return result;
     }
 

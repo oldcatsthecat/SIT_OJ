@@ -17,7 +17,7 @@ public interface CompetitionService extends IService<Competition> {
     Map<String, Object> getRanklist(Integer competitionId, Integer current, Integer size);
 
     // 核心：处理比赛提交后的数据更新（由判题服务回调）
-    void updateAcmStats(Integer userId, Integer competitionId, Integer problemId, String status);
+    void updateAcmStats(Integer userId, Integer competitionId, Integer problemId, String status, String submissionTime);
 
     Result handleSubmission(Integer userId, Integer competitionId, Integer problemId, String code, String language);
 
