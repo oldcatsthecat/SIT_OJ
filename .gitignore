@@ -4,18 +4,14 @@
 
 docs
 
+# 独立测试工程
+/sit_oj_tests/
+
 SIT_OJ-main (未加封榜完整版).zip
 
 /sit_oj_backend/.idea
 /sit_oj_frontend/
 
-/sit_oj_backend/competition/src/test
-/sit_oj_backend/gateway/src/test
-/sit_oj_backend/judge/src/test
-/sit_oj_backend/problem/src/test
-/sit_oj_backend/submission/src/test
-/sit_oj_backend/user/src/test
-/sit_oj_backend/system-test
 # 忽略后端编译文件
 **/target/
 
