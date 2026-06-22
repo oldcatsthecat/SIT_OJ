@@ -76,14 +76,30 @@
         </dependencies>
     </dependencyManagement>
 
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>3.0.5</version>
+                    <configuration>
+                        <!-- 默认打出普通 JAR（可被测试工程依赖），可执行 JAR 带 exec 后缀 -->
+                        <classifier>exec</classifier>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
     <modules>
+        <module>common</module>
+        <module>user</module>
         <module>problem</module>
         <module>submission</module>
         <module>judge</module>
-        <module>common</module>
-        <module>gateway</module>
-        <module>user</module>
         <module>competition</module>
+        <module>gateway</module>
     </modules>
 
 </project>

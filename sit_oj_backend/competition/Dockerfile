@@ -11,7 +11,7 @@ RUN apk add --no-cache tzdata && \
 # 声明临时卷
 VOLUME /tmp
 
-ARG JAR_FILE=target/*.jar
+ARG JAR_FILE=target/*-exec.jar
 
 COPY ${JAR_FILE} app.jar
 
