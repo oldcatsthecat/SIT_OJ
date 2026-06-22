@@ -2,6 +2,8 @@
 .idea/
 *.iml
 
+docs
+
 /sit_oj_backend/.idea
 /sit_oj_frontend/
 
