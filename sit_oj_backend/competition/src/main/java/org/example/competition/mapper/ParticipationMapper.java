@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.example.competition.entity.Participation;
 
@@ -22,7 +23,7 @@ public interface ParticipationMapper extends BaseMapper<Participation> {
             "AND EXISTS (SELECT 1 FROM competition_submission_stats s " +
             "WHERE s.user_id = p.user_id AND s.competition_id = p.competition_id) " +
             "ORDER BY p.solved_count DESC, p.total_penalty ASC")
-    List<Participation> getRanklist(Integer competitionId);
+    List<Participation> getRanklist(@Param("competitionId") Integer competitionId);
 
     /**
      * 分页获取比赛排名
@@ -33,5 +34,5 @@ public interface ParticipationMapper extends BaseMapper<Participation> {
             "AND EXISTS (SELECT 1 FROM competition_submission_stats s " +
             "WHERE s.user_id = p.user_id AND s.competition_id = p.competition_id) " +
             "ORDER BY p.solved_count DESC, p.total_penalty ASC")
-    IPage<Participation> getRanklistPage(Page<Participation> page, Integer competitionId);
+    IPage<Participation> getRanklistPage(Page<Participation> page, @Param("competitionId") Integer competitionId);
 }
