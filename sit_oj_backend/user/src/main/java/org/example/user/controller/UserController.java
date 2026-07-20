@@ -1,6 +1,7 @@
 package org.example.user.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import org.example.common.utils.Result;
 import org.example.user.entity.User;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.Date;
 import java.util.Map;
 
 @RestController
@@ -77,6 +79,44 @@ public class UserController {
             return Result.success(user);
         } catch (Exception e) {
             return Result.error("登录状态失效，请重新登录");
+        }
+    }
+
+    /**
+     * 刷新 JWT Token
+     * 接受即将过期或刚过期的旧 Token（过期不超过 7 天），返回新 Token
+     */
+    @PostMapping("/refresh")
+    public Result<String> refreshToken(@RequestHeader("Authorization") String token) {
+        try {
+            // 1. 解析旧 token（允许过期）
+            Claims claims = jwtUtil.getClaimsAllowExpired(token);
+            if (claims == null) {
+                return Result.error("Token 无效");
+            }
+
+            // 2. 检查过期时间：过期超过 7 天则拒绝刷新
+            Date expiration = claims.getExpiration();
+            long sevenDaysMs = 7L * 24 * 60 * 60 * 1000;
+            if (System.currentTimeMillis() - expiration.getTime() > sevenDaysMs) {
+                return Result.error("登录已过期超过 7 天，请重新登录");
+            }
+
+            // 3. 根据 userId 查找用户并生成新 token
+            Object userIdObj = claims.get("id");
+            if (userIdObj == null) {
+                return Result.error("Token 无效");
+            }
+            Integer userId = Integer.valueOf(userIdObj.toString());
+            User user = userService.getById(userId);
+            if (user == null) {
+                return Result.error("用户不存在");
+            }
+
+            String newToken = jwtUtil.generateToken(user);
+            return Result.success(newToken);
+        } catch (Exception e) {
+            return Result.error("Token 刷新失败，请重新登录");
         }
     }
 

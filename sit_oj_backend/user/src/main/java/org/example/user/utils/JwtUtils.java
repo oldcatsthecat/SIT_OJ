@@ -1,6 +1,7 @@
 package org.example.user.utils;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
@@ -58,6 +59,40 @@ public class JwtUtils {
     }
     public String getRoleFromToken(String token) {
         return getClaims(token).get("role", String.class);
+    }
+
+    /**
+     * 检查 Token 是否已过期
+     */
+    public boolean isTokenExpired(String token) {
+        try {
+            Claims claims = getClaims(token);
+            return claims.getExpiration().before(new Date());
+        } catch (ExpiredJwtException e) {
+            return true;
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    /**
+     * 解析 Token 并返回 Claims（允许过期 Token）
+     * 用于 refresh 时提取用户信息，即使是过期的 token 也能拿到 userId
+     */
+    public Claims getClaimsAllowExpired(String token) {
+        if (token != null && token.startsWith("Bearer ")) {
+            token = token.substring(7);
+        }
+        try {
+            return Jwts.parserBuilder()
+                    .setSigningKey(Keys.hmacShaKeyFor(jwtProperties.getSecret().getBytes()))
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+        } catch (ExpiredJwtException e) {
+            // 过期也返回 claims，调用方自行判断是否允许
+            return e.getClaims();
+        }
     }
 
 }
