@@ -18,6 +18,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Slf4j
@@ -62,7 +63,7 @@ public class JudgeServiceImpl implements JudgeService {
             }
 
             // 4. 解析判题结果
-            JudgeResultResponse judgeResult = parseJudgeResponse(body, timeLimit);
+            JudgeResultResponse judgeResult = parseJudgeResponse(body, getEffectiveTimeLimit(language, timeLimit));
 
             // 5. 构建消息结果
             return JudgeResultMessage.builder()
@@ -114,7 +115,7 @@ public class JudgeServiceImpl implements JudgeService {
                 body = sendToJudgeServerSpj(code, language, String.valueOf(problemId), timeLimit, memoryLimit,spj_code);
             }
             // 4. 解析判题机结果并转换 (逻辑下沉)
-            return parseJudgeResponse(body, timeLimit);
+            return parseJudgeResponse(body, getEffectiveTimeLimit(language, timeLimit));
 
         } catch (Exception e) {
             return JudgeResultResponse.builder().status("SE").errorMessage(e.getMessage()).build();
@@ -188,14 +189,13 @@ public class JudgeServiceImpl implements JudgeService {
         // 1. 生成加密 Token
         String token = DigestUtils.sha256Hex(judgeConfig.getToken());
 
-        // 2. 动态获取语言配置 (处理 Java 的 -Xmx)
-        Map<String, Object> langConfig = getDynamicLangConfig(language, memoryLimit);
+        // 2. 题目存储 C/C++ 基准限制，Java 的堆大小使用调整后的内存限制
+        int finalTime = getEffectiveTimeLimit(language, timeLimit);
+        int effectiveMemory = getEffectiveMemoryLimit(language, memoryLimit);
+        Map<String, Object> langConfig = getDynamicLangConfig(language, effectiveMemory);
 
-        // 3. 设置运行限制
-        int finalTime = (timeLimit != null) ? timeLimit : 1000;
-        // memoryLimit 单位为 MB，JudgeServer 的 max_memory 单位为 byte
-        // 不额外加内存余量，让 JudgeServer 自行处理（SPj 进程会在 JudgeServer 内部获得 3x max_memory）
-        long finalMemory = (long) memoryLimit * 1024 * 1024;
+        // 3. 将 MB 转为 JudgeServer 要求的 byte
+        long finalMemory = (long) effectiveMemory * 1024 * 1024;
 
         System.out.println("最终内存为:" + finalMemory);
 
@@ -236,15 +236,13 @@ public class JudgeServiceImpl implements JudgeService {
         // 1. 生成加密 Token
         String token = DigestUtils.sha256Hex(judgeConfig.getToken());
 
-        // 2. 动态获取用户代码的语言配置
-        Map<String, Object> langConfig = getDynamicLangConfig(language, memoryLimit);
+        // 2. 普通判题与 SPJ 使用相同的用户程序资源限制
+        int finalTime = getEffectiveTimeLimit(language, timeLimit);
+        int effectiveMemory = getEffectiveMemoryLimit(language, memoryLimit);
+        Map<String, Object> langConfig = getDynamicLangConfig(language, effectiveMemory);
 
-        // 3. 设置运行限制
-        // memoryLimit 单位为 MB，JudgeServer 的 max_memory 单位为 byte
-        // 关键：不额外加内存余量！JudgeServer 的 _spj() 方法会将 max_memory × 3 作为 SPJ 进程的内存限制
-        // 如果加 512MB（Python）会导致 SPJ 内存 = (256+512)×3 = 2.3GB，超出容器 1GB 限制 → OOM → SPJ_ERROR
-        int finalTime = (timeLimit != null) ? timeLimit : 1000;
-        long finalMemory = (long) memoryLimit * 1024 * 1024;
+        // 3. 将 MB 转为 byte；SPJ 检查器自身的资源由 JudgeServer 管理
+        long finalMemory = (long) effectiveMemory * 1024 * 1024;
 
         // --- 准备 SPJ 必须的默认配置 (通常基于 C++ ) ---
         // spj_version 使用源码的 MD5，防止判题机缓存了旧的编译结果
@@ -346,10 +344,26 @@ public class JudgeServiceImpl implements JudgeService {
         }
     }
 
+    /** 题目设置以 C/C++ 为基准，Python/Java 获得两倍限制，内存最多 512 MB。 */
+    private boolean usesDoubledLimits(String language) {
+        String lang = language == null ? "" : language.toUpperCase(Locale.ROOT);
+        return lang.contains("PY") || lang.contains("JAVA");
+    }
+
+    private int getEffectiveTimeLimit(String language, Integer timeLimit) {
+        int baseTime = timeLimit != null ? timeLimit : 1000;
+        return usesDoubledLimits(language) ? Math.multiplyExact(baseTime, 2) : baseTime;
+    }
+
+    private int getEffectiveMemoryLimit(String language, Integer memoryLimit) {
+        int baseMemory = memoryLimit != null ? memoryLimit : 256;
+        return usesDoubledLimits(language) ? (int) Math.min((long) baseMemory * 2, 512) : baseMemory;
+    }
+
     private Map<String, Object> getDynamicLangConfig(String language, Integer memoryLimit) {
         if (language == null) return new HashMap<>(JudgeConstants.CPP_CONFIG_OBJECT);
 
-        String lang = language.toUpperCase();
+        String lang = language.toUpperCase(Locale.ROOT);
 
         // 1. 处理 C/C++
         if (lang.contains("C") || lang.contains("CPP")) {

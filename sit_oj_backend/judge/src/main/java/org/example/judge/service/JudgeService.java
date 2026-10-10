@@ -12,7 +12,7 @@ public interface JudgeService {
     // RabbitMQ 消息入口：从消息体直接判题，返回 JudgeResultMessage
     JudgeResultMessage processJudge(JudgeMessage message);
 
-    // 底层判题机通讯
+    // 底层判题机通讯：传入题目的 C/C++ 基准限制，由实现按提交语言调整
     JudgeServerResponse<Object> sendToJudgeServer(String code, String language, String testCaseId, Integer timeLimit, Integer memoryLimit);
 
     JudgeServerResponse<Object> sendToJudgeServerSpj(String code, String language, String testCaseId, Integer timeLimit, Integer memoryLimit, String spj_src);
