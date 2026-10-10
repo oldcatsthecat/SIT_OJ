@@ -77,9 +77,13 @@ public class AdminCompetitionController {
      */
     @GetMapping("/{id}/export")
     public Result exportForResolver(@PathVariable Integer id) {
-        String ndjson = competitionService.exportForResolver(id);
-        if (ndjson == null) return Result.error("比赛不存在");
-        return Result.success(ndjson);
+        try {
+            String ndjson = competitionService.exportForResolver(id);
+            if (ndjson == null) return Result.error("比赛不存在");
+            return Result.success(ndjson);
+        } catch (IllegalArgumentException e) {
+            return Result.error(e.getMessage());
+        }
     }
 
     @GetMapping("/{id}/export/participants")

@@ -638,6 +638,10 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             problemLabels.put(pid, String.valueOf((char) ('A' + idx++)));
         }
 
+        // 同一份完整提交快照用于滚榜、一血和最终成绩；不改动封榜统计及数据库。
+        List<ResolverSubmission> exportSubmissions = loadResolverSubmissions(comp, participantIds, problemLabels.keySet());
+        List<ResolverScore> finalScores = calculateResolverScores(comp, participantIds, exportSubmissions);
+
         java.time.format.DateTimeFormatter tsFmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
         String startTime = comp.getStartTime() != null ? comp.getStartTime().format(tsFmt) + ".000+08:00" : "";
         String endTime = comp.getEndTime() != null ? comp.getEndTime().format(tsFmt) + ".000+08:00" : "";
@@ -763,15 +767,10 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         } catch (Exception e) { log.error("导出teams失败", e); }
 
         // 只用 participants 计算奖牌名额并按 ACM 成绩排序，stars 保留在滚榜数据中。
-        List<Participation> sorted = parts.stream()
-                .filter(p -> !"stars".equals(groups.getOrDefault(p.getUserId(), "participants")))
-                .collect(Collectors.toCollection(ArrayList::new));
+        List<ResolverScore> sorted = finalScores.stream()
+                .filter(score -> !"stars".equals(groups.getOrDefault(score.userId, "participants")))
+                .toList();
         int numTeams = sorted.size();
-        sorted.sort((a, b) -> {
-            if (!a.getSolvedCount().equals(b.getSolvedCount()))
-                return b.getSolvedCount() - a.getSolvedCount();
-            return a.getTotalPenalty() - b.getTotalPenalty();
-        });
         int goldCount = Math.max(1, (int) Math.ceil(numTeams * 0.10));
         int silverCount = Math.max(1, (int) Math.ceil(numTeams * 0.20));
         int bronzeCount = Math.max(1, (int) Math.ceil(numTeams * 0.30));
@@ -781,96 +780,72 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
 
         int rankIdx = 0;
         List<String> goldIds = new ArrayList<>();
-        for (int i = 0; i < goldCount; i++) goldIds.add(sorted.get(rankIdx++).getUserId().toString());
+        for (int i = 0; i < goldCount; i++) goldIds.add(sorted.get(rankIdx++).userId.toString());
         List<String> silverIds = new ArrayList<>();
-        for (int i = 0; i < silverCount; i++) silverIds.add(sorted.get(rankIdx++).getUserId().toString());
+        for (int i = 0; i < silverCount; i++) silverIds.add(sorted.get(rankIdx++).userId.toString());
         List<String> bronzeIds = new ArrayList<>();
-        for (int i = 0; i < bronzeCount; i++) bronzeIds.add(sorted.get(rankIdx++).getUserId().toString());
+        for (int i = 0; i < bronzeCount; i++) bronzeIds.add(sorted.get(rankIdx++).userId.toString());
 
         // state (started)
         sb.append("{\"type\":\"state\",\"data\":{\"started\":\"").append(startTime)
           .append("\"},\"token\":\"cd").append(token++).append("\"}\n");
 
         // submissions & judgements & runs
-        try {
-            List<Map<String, Object>> rawSubs = getCompetitionSubmissionsForExport(competitionId);
-            // 按 contest_time 排序
-            rawSubs.sort((a, b) -> {
-                Object ta = a.get("submissionTime");
-                Object tb = b.get("submissionTime");
-                if (ta == null && tb == null) return 0;
-                if (ta == null) return -1;
-                if (tb == null) return 1;
-                return ta.toString().compareTo(tb.toString());
-            });
-            for (Map<String, Object> sub : rawSubs) {
-                Integer subId = (Integer) sub.get("submissionId");
-                Integer uid = (Integer) sub.get("userId");
-                Integer pid = (Integer) sub.get("problemId");
-                String probLabel = problemLabels.getOrDefault(pid, "?");
-                String status = (String) sub.get("status");
-                String lang = (String) sub.getOrDefault("language", "cpp");
-                Object timeObj = sub.get("submissionTime");
-                java.time.LocalDateTime subTime;
-                if (timeObj instanceof String) {
-                    subTime = java.time.LocalDateTime.parse(((String) timeObj).replace("T", " ").substring(0, 19),
-                            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-                } else {
-                    subTime = comp.getStartTime();
-                }
-                long contestMs = java.time.Duration.between(comp.getStartTime(), subTime).toMillis();
-                String cTime = String.format("%d:%02d:%02d.%03d", contestMs / 3600000, (contestMs % 3600000) / 60000, (contestMs % 60000) / 1000, contestMs % 1000);
-                String subTimeStr = subTime != null ? subTime.format(tsFmt) + ".000+08:00" : startTime;
+        for (ResolverSubmission sub : exportSubmissions) {
+            Integer subId = sub.submissionId();
+            Integer uid = sub.userId();
+            String probLabel = problemLabels.get(sub.problemId());
+            String lang = sub.language();
+            LocalDateTime subTime = sub.submissionTime();
+            long contestMs = java.time.Duration.between(comp.getStartTime(), subTime).toMillis();
+            String cTime = String.format("%d:%02d:%02d.%03d", contestMs / 3600000, (contestMs % 3600000) / 60000, (contestMs % 60000) / 1000, contestMs % 1000);
+            String subTimeStr = subTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")) + "+08:00";
+            double runTime = sub.runTime();
+            String jt = sub.judgementType();
 
-                double runTime = 0.003;
-                try { Object tc = sub.get("timeCost"); if (tc instanceof Number) runTime = ((Number) tc).doubleValue() / 1000.0; } catch (Exception ignored) {}
+            // submission
+            sb.append("{\"type\":\"submissions\",\"id\":\"").append(subId).append("\",\"data\":{")
+              .append("\"id\":\"").append(subId).append("\",")
+              .append("\"problem_id\":\"").append(probLabel).append("\",")
+              .append("\"team_id\":\"").append(uid).append("\",")
+              .append("\"language_id\":\"").append(lang).append("\",")
+              .append("\"files\":[{\"href\":\"contests/submissions/").append(subId).append("/files\",")
+              .append("\"filename\":\"submission.zip\",\"mime\":\"application/zip\"}],")
+              .append("\"contest_time\":\"").append(cTime).append("\",")
+              .append("\"time\":\"").append(subTimeStr).append("\"")
+              .append("},\"token\":\"cd").append(token++).append("\"}\n");
 
-                String jt = mapStatus(status);
+            // judgement (pending)
+            sb.append("{\"type\":\"judgements\",\"id\":\"").append(subId).append("\",\"data\":{")
+              .append("\"id\":\"").append(subId).append("\",")
+              .append("\"submission_id\":\"").append(subId).append("\",")
+              .append("\"start_contest_time\":\"").append(cTime).append("\",")
+              .append("\"start_time\":\"").append(subTimeStr).append("\"")
+              .append("},\"token\":\"cd").append(token++).append("\"}\n");
 
-                // submission
-                sb.append("{\"type\":\"submissions\",\"id\":\"").append(subId).append("\",\"data\":{")
-                  .append("\"id\":\"").append(subId).append("\",")
-                  .append("\"problem_id\":\"").append(probLabel).append("\",")
-                  .append("\"team_id\":\"").append(uid).append("\",")
-                  .append("\"language_id\":\"").append(lang).append("\",")
-                  .append("\"files\":[{\"href\":\"contests/submissions/").append(subId).append("/files\",")
-                  .append("\"filename\":\"submission.zip\",\"mime\":\"application/zip\"}],")
-                  .append("\"contest_time\":\"").append(cTime).append("\",")
-                  .append("\"time\":\"").append(subTimeStr).append("\"")
-                  .append("},\"token\":\"cd").append(token++).append("\"}\n");
+            // run
+            sb.append("{\"type\":\"runs\",\"id\":\"").append(subId).append("\",\"data\":{")
+              .append("\"id\":\"").append(subId).append("\",")
+              .append("\"judgement_id\":\"").append(subId).append("\",")
+              .append("\"judgement_type_id\":\"").append(jt).append("\",")
+              .append("\"ordinal\":1,")
+              .append("\"run_time\":").append(runTime).append(",")
+              .append("\"contest_time\":\"").append(cTime).append("\",")
+              .append("\"time\":\"").append(subTimeStr).append("\"")
+              .append("},\"token\":\"cd").append(token++).append("\"}\n");
 
-                // judgement (pending)
-                sb.append("{\"type\":\"judgements\",\"id\":\"").append(subId).append("\",\"data\":{")
-                  .append("\"id\":\"").append(subId).append("\",")
-                  .append("\"submission_id\":\"").append(subId).append("\",")
-                  .append("\"start_contest_time\":\"").append(cTime).append("\",")
-                  .append("\"start_time\":\"").append(subTimeStr).append("\"")
-                  .append("},\"token\":\"cd").append(token++).append("\"}\n");
-
-                // run
-                sb.append("{\"type\":\"runs\",\"id\":\"").append(subId).append("\",\"data\":{")
-                  .append("\"id\":\"").append(subId).append("\",")
-                  .append("\"judgement_id\":\"").append(subId).append("\",")
-                  .append("\"judgement_type_id\":\"").append(jt).append("\",")
-                  .append("\"ordinal\":1,")
-                  .append("\"run_time\":").append(runTime).append(",")
-                  .append("\"contest_time\":\"").append(cTime).append("\",")
-                  .append("\"time\":\"").append(subTimeStr).append("\"")
-                  .append("},\"token\":\"cd").append(token++).append("\"}\n");
-
-                // judgement (final)
-                sb.append("{\"type\":\"judgements\",\"id\":\"").append(subId).append("\",\"data\":{")
-                  .append("\"id\":\"").append(subId).append("\",")
-                  .append("\"submission_id\":\"").append(subId).append("\",")
-                  .append("\"judgement_type_id\":\"").append(jt).append("\",")
-                  .append("\"max_run_time\":").append(runTime).append(",")
-                  .append("\"start_contest_time\":\"").append(cTime).append("\",")
-                  .append("\"start_time\":\"").append(subTimeStr).append("\",")
-                  .append("\"end_contest_time\":\"").append(cTime).append("\",")
-                  .append("\"end_time\":\"").append(subTimeStr).append("\"")
-                  .append("},\"token\":\"cd").append(token++).append("\"}\n");
-            }
-        } catch (Exception e) { log.error("导出提交失败", e); }
+            // judgement (final)
+            sb.append("{\"type\":\"judgements\",\"id\":\"").append(subId).append("\",\"data\":{")
+              .append("\"id\":\"").append(subId).append("\",")
+              .append("\"submission_id\":\"").append(subId).append("\",")
+              .append("\"judgement_type_id\":\"").append(jt).append("\",")
+              .append("\"max_run_time\":").append(runTime).append(",")
+              .append("\"start_contest_time\":\"").append(cTime).append("\",")
+              .append("\"start_time\":\"").append(subTimeStr).append("\",")
+              .append("\"end_contest_time\":\"").append(cTime).append("\",")
+              .append("\"end_time\":\"").append(subTimeStr).append("\"")
+              .append("},\"token\":\"cd").append(token++).append("\"}\n");
+        }
 
         // freeze time
         String freezeTime = endTime;
@@ -897,44 +872,40 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
           .append("},\"token\":\"cd").append(token++).append("\"}\n");
 
         // awards — 标准格式: type→id→data→token, parameters 为空对象
-        // winner
-        if (!goldIds.isEmpty()) {
-            sb.append("{\"type\":\"awards\",\"id\":\"winner\",\"data\":{")
-              .append("\"id\":\"winner\",")
-              .append("\"team_ids\":[\"").append(goldIds.get(0)).append("\"],")
-              .append("\"citation\":\"Champion\",")
+        // 各组独立产生冠军，不再导出全场 winner；同分同罚时的并列第一共同获奖。
+        for (String group : List.of("stars", "participants")) {
+            List<ResolverScore> groupScores = finalScores.stream()
+                    .filter(score -> group.equals(groups.getOrDefault(score.userId, "participants")))
+                    .toList();
+            if (groupScores.isEmpty() || groupScores.get(0).solvedCount == 0) continue;
+            ResolverScore champion = groupScores.get(0);
+            String championIds = groupScores.stream()
+                    .filter(score -> score.solvedCount == champion.solvedCount && score.totalPenalty == champion.totalPenalty)
+                    .map(score -> "\"" + score.userId + "\"")
+                    .collect(Collectors.joining(","));
+            sb.append("{\"type\":\"awards\",\"id\":\"group-winner-").append(group).append("\",\"data\":{")
+              .append("\"id\":\"group-winner-").append(group).append("\",")
+              .append("\"team_ids\":[").append(championIds).append("],")
+              .append("\"citation\":\"").append(group).append(" Champions\",")
               .append("\"parameters\":{}")
               .append("},\"token\":\"cd").append(token++).append("\"}\n");
         }
 
         // first-to-solve (按提交时间找每题第一个 AC)
-        try {
-            List<Map<String, Object>> allSubs = getCompetitionSubmissionsForExport(competitionId);
-            allSubs.sort((a, b) -> {
-                Object ta = a.get("submissionTime");
-                Object tb = b.get("submissionTime");
-                if (ta == null && tb == null) return 0;
-                if (ta == null) return -1;
-                if (tb == null) return 1;
-                return ta.toString().compareTo(tb.toString());
-            });
-            java.util.Set<String> ftsDone = new java.util.HashSet<>();
-            for (Map<String, Object> sub : allSubs) {
-                String st = (String) sub.get("status");
-                if (!"AC".equalsIgnoreCase(st) && !"ACCEPTED".equalsIgnoreCase(st)) continue;
-                Integer ftsPid = (Integer) sub.get("problemId");
-                String label = problemLabels.get(ftsPid);
-                if (label == null || ftsDone.contains(label)) continue;
-                ftsDone.add(label);
-                Integer ftsUid = (Integer) sub.get("userId");
-                sb.append("{\"type\":\"awards\",\"id\":\"first-to-solve-").append(label).append("\",\"data\":{")
-                  .append("\"id\":\"first-to-solve-").append(label).append("\",")
-                  .append("\"team_ids\":[\"").append(ftsUid).append("\"],")
-                  .append("\"citation\":\"First to solve problem ").append(label).append("\",")
-                  .append("\"parameters\":{}")
-                  .append("},\"token\":\"cd").append(token++).append("\"}\n");
-            }
-        } catch (Exception e) { log.error("导出 first-to-solve 失败", e); }
+        java.util.Set<String> ftsDone = new java.util.HashSet<>();
+        for (ResolverSubmission sub : exportSubmissions) {
+            if (!"AC".equals(sub.judgementType())) continue;
+            String label = problemLabels.get(sub.problemId());
+            if (label == null || ftsDone.contains(label)) continue;
+            ftsDone.add(label);
+            Integer ftsUid = sub.userId();
+            sb.append("{\"type\":\"awards\",\"id\":\"first-to-solve-").append(label).append("\",\"data\":{")
+              .append("\"id\":\"first-to-solve-").append(label).append("\",")
+              .append("\"team_ids\":[\"").append(ftsUid).append("\"],")
+              .append("\"citation\":\"First to solve problem ").append(label).append("\",")
+              .append("\"parameters\":{}")
+              .append("},\"token\":\"cd").append(token++).append("\"}\n");
+        }
 
         // bronze-medal
         sb.append("{\"type\":\"awards\",\"id\":\"bronze-medal\",\"data\":{")
@@ -974,12 +945,89 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
 
     // --- Helper methods for export ---
 
+    private record ResolverSubmission(Integer submissionId, Integer userId, Integer problemId,
+                                      String judgementType, LocalDateTime submissionTime, String language,
+                                      double runTime) {}
+
+    private static class ResolverScore {
+        final Integer userId;
+        int solvedCount;
+        long totalPenalty;
+        final Set<Integer> solvedProblems = new HashSet<>();
+        final Map<Integer, Integer> wrongAttempts = new HashMap<>();
+
+        ResolverScore(Integer userId) {
+            this.userId = userId;
+        }
+    }
+
+    private List<ResolverSubmission> loadResolverSubmissions(Competition comp, Set<Integer> userIds,
+                                                            Set<Integer> problemIds) {
+        if (comp.getStartTime() == null || comp.getEndTime() == null
+                || !comp.getEndTime().isAfter(comp.getStartTime())) {
+            throw new IllegalArgumentException("比赛起止时间无效，无法计算最终成绩");
+        }
+        List<ResolverSubmission> submissions = new ArrayList<>();
+        for (Map<String, Object> raw : getCompetitionSubmissionsForExport(comp.getCompetitionId())) {
+            Integer uid = (Integer) raw.get("userId");
+            Integer pid = (Integer) raw.get("problemId");
+            if (!userIds.contains(uid) || !problemIds.contains(pid)) continue;
+            Integer sid = (Integer) raw.get("submissionId");
+            LocalDateTime submittedAt;
+            try {
+                Object time = raw.get("submissionTime");
+                submittedAt = time instanceof LocalDateTime ? (LocalDateTime) time
+                        : LocalDateTime.parse(time.toString().replace(' ', 'T'));
+            } catch (Exception e) {
+                throw new IllegalArgumentException("提交 " + sid + " 的时间无效，无法计算最终成绩", e);
+            }
+            // 赛前和比赛结束时刻起的练习提交不参与滚榜或任何奖项。
+            if (submittedAt.isBefore(comp.getStartTime()) || !submittedAt.isBefore(comp.getEndTime())) continue;
+            String status = (String) raw.get("status");
+            if (status == null || "PENDING".equalsIgnoreCase(status) || "JUDGING".equalsIgnoreCase(status)) {
+                throw new IllegalArgumentException("存在尚未完成判题的提交，请等待判题完成后再导出");
+            }
+            if (sid == null) throw new IllegalArgumentException("提交编号缺失，无法导出");
+            Object timeCost = raw.get("timeCost");
+            double runTime = timeCost instanceof Number ? ((Number) timeCost).doubleValue() / 1000.0 : 0.003;
+            submissions.add(new ResolverSubmission(sid, uid, pid, mapStatus(status), submittedAt,
+                    Objects.toString(raw.get("language"), "cpp"), runTime));
+        }
+        submissions.sort(Comparator.comparing(ResolverSubmission::submissionTime)
+                .thenComparing(ResolverSubmission::submissionId));
+        return submissions;
+    }
+
+    private List<ResolverScore> calculateResolverScores(Competition comp, Set<Integer> userIds,
+                                                       List<ResolverSubmission> submissions) {
+        Map<Integer, ResolverScore> scores = new HashMap<>();
+        for (Integer uid : userIds) scores.put(uid, new ResolverScore(uid));
+        for (ResolverSubmission sub : submissions) {
+            ResolverScore score = scores.get(sub.userId());
+            if (score.solvedProblems.contains(sub.problemId())) continue;
+            if ("AC".equals(sub.judgementType())) {
+                score.solvedProblems.add(sub.problemId());
+                score.solvedCount++;
+                score.totalPenalty += java.time.Duration.between(comp.getStartTime(), sub.submissionTime()).toMinutes()
+                        + 20L * score.wrongAttempts.getOrDefault(sub.problemId(), 0);
+            } else if (!"CE".equals(sub.judgementType())) {
+                score.wrongAttempts.merge(sub.problemId(), 1, Integer::sum);
+            }
+        }
+        return scores.values().stream()
+                .sorted(Comparator.comparingInt((ResolverScore score) -> score.solvedCount).reversed()
+                        .thenComparingLong(score -> score.totalPenalty).thenComparing(score -> score.userId))
+                .toList();
+    }
+
     private List<Map<String, Object>> getCompetitionSubmissionsForExport(Integer competitionId) {
         try {
-            return submissionFeignClient.exportSubmissions(competitionId);
+            List<Map<String, Object>> submissions = submissionFeignClient.exportSubmissions(competitionId);
+            if (submissions == null) throw new IllegalStateException("提交数据为空响应");
+            return submissions;
         } catch (Exception e) {
             log.error("导出比赛提交失败: competitionId={}", competitionId, e);
-            return new ArrayList<>();
+            throw new IllegalArgumentException("无法获取完整提交数据，请稍后重新导出", e);
         }
     }
 

@@ -6,7 +6,6 @@ import org.example.competition.config.FeignConfig;
 import org.springframework.cloud.openfeign.FallbackFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -36,7 +35,7 @@ public class SubmissionFeignClientFallback implements FallbackFactory<Submission
             @Override
             public List<Map<String, Object>> exportSubmissions(Integer competitionId) {
                 log.warn("SubmissionFeignClient.exportSubmissions 降级: competitionId={}", competitionId);
-                return Collections.emptyList();
+                throw new IllegalStateException("无法获取完整比赛提交数据", cause);
             }
         };
     }
