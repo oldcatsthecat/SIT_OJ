@@ -36,6 +36,12 @@ public interface CompetitionService extends IService<Competition> {
     /** 导出比赛数据为 ICPC Resolver NDJSON 格式 */
     String exportForResolver(Integer competitionId);
 
+    /** 导出时可选择的完整报名名单，包含尚未提交的用户。 */
+    List<Participation> getResolverParticipants(Integer competitionId);
+
+    /** 分组仅应用于本次导出，stars 不参与奖牌分配。 */
+    String exportForResolver(Integer competitionId, Map<Integer, String> userGroups);
+
     boolean updateCompetitionName(Competition competition);
 
 }

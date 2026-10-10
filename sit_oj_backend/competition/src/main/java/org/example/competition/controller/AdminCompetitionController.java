@@ -1,7 +1,9 @@
 package org.example.competition.controller;
 
 import org.example.common.utils.Result;
+import org.example.competition.dto.ResolverExportRequest;
 import org.example.competition.entity.Competition;
+import org.example.competition.entity.Participation;
 import org.example.competition.service.CompetitionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -78,5 +80,21 @@ public class AdminCompetitionController {
         String ndjson = competitionService.exportForResolver(id);
         if (ndjson == null) return Result.error("比赛不存在");
         return Result.success(ndjson);
+    }
+
+    @GetMapping("/{id}/export/participants")
+    public Result getResolverParticipants(@PathVariable Integer id) {
+        List<Participation> participants = competitionService.getResolverParticipants(id);
+        return participants == null ? Result.error("比赛不存在") : Result.success(participants);
+    }
+
+    @PostMapping("/{id}/export")
+    public Result exportForResolver(@PathVariable Integer id, @RequestBody ResolverExportRequest request) {
+        try {
+            String ndjson = competitionService.exportForResolver(id, request.getUserGroups());
+            return ndjson == null ? Result.error("比赛不存在") : Result.success(ndjson);
+        } catch (IllegalArgumentException e) {
+            return Result.error(e.getMessage());
+        }
     }
 }

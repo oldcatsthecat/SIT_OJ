@@ -585,12 +585,48 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
 
     @Override
     public String exportForResolver(Integer competitionId) {
+        return exportForResolver(competitionId, Collections.emptyMap());
+    }
+
+    @Override
+    public List<Participation> getResolverParticipants(Integer competitionId) {
+        if (this.getById(competitionId) == null) return null;
+        List<Participation> participants = participationMapper.selectList(
+                new LambdaQueryWrapper<Participation>()
+                        .eq(Participation::getCompetitionId, competitionId)
+                        .orderByAsc(Participation::getUserId));
+        for (Participation participant : participants) {
+            try {
+                Map<String, Object> user = userFeignClient.getUserById(participant.getUserId());
+                if (user != null) {
+                    participant.setUsername((String) user.get("username"));
+                    participant.setRealName((String) user.get("realName"));
+                }
+            } catch (Exception e) {
+                log.warn("获取导出名单用户信息失败 userId={}", participant.getUserId(), e);
+            }
+        }
+        return participants;
+    }
+
+    @Override
+    public String exportForResolver(Integer competitionId, Map<Integer, String> userGroups) {
         Competition comp = this.getById(competitionId);
         if (comp == null) return null;
 
         List<Participation> parts = participationMapper.selectList(
                 new LambdaQueryWrapper<Participation>()
                         .eq(Participation::getCompetitionId, competitionId));
+        Map<Integer, String> groups = userGroups == null ? Collections.emptyMap() : userGroups;
+        Set<Integer> participantIds = parts.stream().map(Participation::getUserId).collect(Collectors.toSet());
+        for (Map.Entry<Integer, String> entry : groups.entrySet()) {
+            if (!participantIds.contains(entry.getKey())) {
+                throw new IllegalArgumentException("用户 " + entry.getKey() + " 不在本场比赛报名名单中，请刷新名单后重试");
+            }
+            if (!"participants".equals(entry.getValue()) && !"stars".equals(entry.getValue())) {
+                throw new IllegalArgumentException("用户状态必须为 participants 或 stars");
+            }
+        }
         List<CompetitionProblem> cpList = cpMapper.selectList(
                 new LambdaQueryWrapper<CompetitionProblem>()
                         .eq(CompetitionProblem::getCompetitionId, competitionId));
@@ -676,6 +712,11 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         sb.append("{\"type\":\"groups\",\"id\":\"participants\",\"data\":{")
           .append("\"id\":\"participants\",\"name\":\"participants\"")
           .append("},\"token\":\"cd").append(token++).append("\"}\n");
+        if (groups.containsValue("stars")) {
+            sb.append("{\"type\":\"groups\",\"id\":\"stars\",\"data\":{")
+              .append("\"id\":\"stars\",\"name\":\"stars\"")
+              .append("},\"token\":\"cd").append(token++).append("\"}\n");
+        }
 
         // organizations & teams & accounts
         try {
@@ -707,7 +748,7 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                   .append("\"name\":\"").append(teamNameEsc).append("\",")
                   .append("\"display_name\":\"").append(teamNameEsc).append("\",")
                   .append("\"icpc_id\":\"").append(uid).append("\",")
-                  .append("\"group_ids\":[\"participants\"],")
+                  .append("\"group_ids\":[\"").append(groups.getOrDefault(p.getUserId(), "participants")).append("\"],")
                   .append("\"organization_id\":\"").append(orgId).append("\"")
                   .append("},\"token\":\"cd").append(token++).append("\"}\n");
 
@@ -721,9 +762,11 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             }
         } catch (Exception e) { log.error("导出teams失败", e); }
 
-        // 按 ACM 成绩排序队伍用于奖牌分配
-        int numTeams = parts.size();
-        List<Participation> sorted = new ArrayList<>(parts);
+        // 只用 participants 计算奖牌名额并按 ACM 成绩排序，stars 保留在滚榜数据中。
+        List<Participation> sorted = parts.stream()
+                .filter(p -> !"stars".equals(groups.getOrDefault(p.getUserId(), "participants")))
+                .collect(Collectors.toCollection(ArrayList::new));
+        int numTeams = sorted.size();
         sorted.sort((a, b) -> {
             if (!a.getSolvedCount().equals(b.getSolvedCount()))
                 return b.getSolvedCount() - a.getSolvedCount();
