@@ -17,8 +17,8 @@ function setupExport(api = {}) {
         { userId: 1, username: 'alice', realName: '甲' },
         { userId: 2, username: 'bob', realName: '乙' }
       ] }),
-      exportResolver: async (id, userGroups) => {
-        requests.push({ id, userGroups });
+      exportResolver: async (id, userGroups, selectedUserIds) => {
+        requests.push({ id, userGroups, selectedUserIds });
         return { code: 200, data: '{"type":"state","data":{}}\n' };
       },
       ...api
@@ -42,6 +42,7 @@ test('opening export defaults every user to participants without downloading', a
   assert.equal(state.participantCount.value, 2);
   assert.equal(state.starCount.value, 0);
   assert.deepEqual(state.exportParticipants.value.map(user => user.group), ['participants', 'participants']);
+  assert.equal(state.selectedExportCount.value, 2);
   assert.equal(requests.length, 0);
 });
 
@@ -54,7 +55,7 @@ test('filtered search preserves selections and exports every user', async () => 
   assert.equal(state.starCount.value, 1);
   assert.equal(state.participantCount.value, 1);
   await state.handleExport();
-  assert.deepEqual(requests, [{ id: 7, userGroups: { 1: 'stars', 2: 'participants' } }]);
+  assert.deepEqual(requests, [{ id: 7, userGroups: { 1: 'stars', 2: 'participants' }, selectedUserIds: [1, 2] }]);
   assert.deepEqual(downloads, ['contest_7_event-feed.ndjson']);
   assert.equal(state.exportDialogVisible.value, false);
   assert.equal(state.exporting.value, false);
@@ -67,6 +68,7 @@ test('all stars can be exported', async () => {
   await state.handleExport();
   assert.equal(state.participantCount.value, 0);
   assert.deepEqual(requests[0].userGroups, { 1: 'stars', 2: 'stars' });
+  assert.deepEqual(requests[0].selectedUserIds, [1, 2]);
 });
 
 test('cancel and opening another competition do not retain prior groups', async () => {
@@ -116,9 +118,34 @@ test('failed export keeps the selection available for retry', async () => {
   assert.deepEqual(messages, ['请刷新名单后重试']);
 });
 
-test('an empty roster remains exportable', async () => {
+test('selection excludes users from the export even while search filters the table', async () => {
+  const { state, requests } = setupExport();
+  await state.openExportDialog({ competitionId: 1 });
+  state.exportParticipants.value[0].selected = false;
+  state.exportParticipants.value[0].group = 'stars';
+  state.exportSearch.value = 'bob';
+  assert.equal(state.selectedExportCount.value, 1);
+  assert.equal(state.participantCount.value, 1);
+  assert.equal(state.starCount.value, 0);
+  await state.handleExport();
+  assert.deepEqual(requests, [{ id: 1, userGroups: { 2: 'participants' }, selectedUserIds: [2] }]);
+});
+
+test('select all toggles the entire roster across a search filter', async () => {
+  const { state, requests } = setupExport();
+  await state.openExportDialog({ competitionId: 1 });
+  state.exportSearch.value = 'alice';
+  state.toggleAllExportParticipants();
+  assert.equal(state.selectedExportCount.value, 0);
+  await state.handleExport();
+  assert.equal(requests.length, 0);
+  state.toggleAllExportParticipants();
+  assert.equal(state.selectedExportCount.value, 2);
+});
+
+test('an empty roster cannot be exported', async () => {
   const { state, requests } = setupExport({ getResolverParticipants: async () => ({ code: 200, data: [] }) });
   await state.openExportDialog({ competitionId: 1 });
   await state.handleExport();
-  assert.deepEqual(requests, [{ id: 1, userGroups: {} }]);
+  assert.deepEqual(requests, []);
 });

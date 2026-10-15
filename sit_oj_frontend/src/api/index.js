@@ -195,7 +195,7 @@ export const adminCompetitionApi = {
 
     getResolverParticipants: (id) => api.get(`/admin/competitions/${id}/export/participants`),
 
-    exportResolver: (id, userGroups = {}) => api.post(`/admin/competitions/${id}/export`, { userGroups }),
+    exportResolver: (id, userGroups = {}, selectedUserIds = null) => api.post(`/admin/competitions/${id}/export`, { userGroups, selectedUserIds }),
 };
 
 export const adminJudgeApi = {
