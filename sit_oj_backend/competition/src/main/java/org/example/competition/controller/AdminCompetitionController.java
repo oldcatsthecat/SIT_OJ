@@ -95,7 +95,7 @@ public class AdminCompetitionController {
     @PostMapping("/{id}/export")
     public Result exportForResolver(@PathVariable Integer id, @RequestBody ResolverExportRequest request) {
         try {
-            String ndjson = competitionService.exportForResolver(id, request.getUserGroups());
+            String ndjson = competitionService.exportForResolver(id, request.getUserGroups(), request.getSelectedUserIds());
             return ndjson == null ? Result.error("比赛不存在") : Result.success(ndjson);
         } catch (IllegalArgumentException e) {
             return Result.error(e.getMessage());

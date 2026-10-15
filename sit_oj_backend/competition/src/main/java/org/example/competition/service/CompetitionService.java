@@ -44,6 +44,9 @@ public interface CompetitionService extends IService<Competition> {
     /** 分组仅应用于本次导出，stars 不参与奖牌分配。 */
     String exportForResolver(Integer competitionId, Map<Integer, String> userGroups);
 
+    /** 仅导出指定选手；selectedUserIds 为 null 时导出完整报名名单。 */
+    String exportForResolver(Integer competitionId, Map<Integer, String> userGroups, List<Integer> selectedUserIds);
+
     boolean updateCompetitionName(Competition competition);
 
 }

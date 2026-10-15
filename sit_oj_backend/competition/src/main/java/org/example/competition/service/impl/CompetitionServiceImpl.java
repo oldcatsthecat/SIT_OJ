@@ -642,6 +642,11 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
 
     @Override
     public String exportForResolver(Integer competitionId, Map<Integer, String> userGroups) {
+        return exportForResolver(competitionId, userGroups, null);
+    }
+
+    @Override
+    public String exportForResolver(Integer competitionId, Map<Integer, String> userGroups, List<Integer> selectedUserIds) {
         Competition comp = this.getById(competitionId);
         if (comp == null) return null;
 
@@ -650,6 +655,14 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                         .eq(Participation::getCompetitionId, competitionId));
         Map<Integer, String> groups = userGroups == null ? Collections.emptyMap() : userGroups;
         Set<Integer> participantIds = parts.stream().map(Participation::getUserId).collect(Collectors.toSet());
+        if (selectedUserIds != null) {
+            if (!participantIds.containsAll(selectedUserIds)) {
+                throw new IllegalArgumentException("所选用户不在本场比赛报名名单中，请刷新名单后重试");
+            }
+            Set<Integer> selectedIds = new HashSet<>(selectedUserIds);
+            parts = parts.stream().filter(part -> selectedIds.contains(part.getUserId())).toList();
+            participantIds = selectedIds;
+        }
         for (Map.Entry<Integer, String> entry : groups.entrySet()) {
             if (!participantIds.contains(entry.getKey())) {
                 throw new IllegalArgumentException("用户 " + entry.getKey() + " 不在本场比赛报名名单中，请刷新名单后重试");
