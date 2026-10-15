@@ -116,7 +116,8 @@ services:
 
   # 判题服务器 (核心限制点：防止 CPU 100% 导致系统假死)
   oj-judge-server:
-    image: registry.cn-hongkong.aliyuncs.com/oj-image/judge:1.6.1
+    build: ./ops/judge-server
+    image: sit_oj-judge-server:1.6.1-early-tle
     container_name: oj-judge-server
     networks:
       - oj-net

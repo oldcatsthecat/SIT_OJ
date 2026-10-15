@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Service
 public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> implements ProblemService {
@@ -22,7 +24,8 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
         boolean admin = "ADMIN".equals(role);
         if (problem == null || (!admin && !Boolean.TRUE.equals(problem.getIsPublic())
                 && (competitionId == null || userId == null
-                || baseMapper.countAuthorizedContestProblem(id, competitionId, userId) == 0))) {
+                || baseMapper.countAuthorizedContestProblem(id, competitionId, userId,
+                        LocalDateTime.now(ZoneId.of("Asia/Shanghai"))) == 0))) {
             throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "题目不存在或无权访问");
         }
         // Public responses must never contain judge source, including for public problems.

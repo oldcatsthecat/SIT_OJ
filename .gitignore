@@ -8,6 +8,11 @@
 !.env.example
 .secrets/
 .agents/
+!.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/oj-remote-deploy/
 .claude/
 skills-lock.json
 incident-backups/

@@ -8,16 +8,18 @@ import org.example.problem.entity.Problem;
 import org.apache.ibatis.annotations.Mapper;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 @Mapper
 public interface ProblemMapper extends BaseMapper<Problem> {
     @Select("SELECT COUNT(*) FROM competition_problems cp " +
             "JOIN competitions c ON c.competition_id = cp.competition_id " +
             "JOIN participations p ON p.competition_id = c.competition_id AND p.user_id = #{userId} " +
-            "WHERE cp.problem_id = #{problemId} AND c.competition_id = #{competitionId} AND c.start_time <= CURRENT_TIMESTAMP")
+            "WHERE cp.problem_id = #{problemId} AND c.competition_id = #{competitionId} AND c.start_time <= #{now}")
     long countAuthorizedContestProblem(@Param("problemId") Integer problemId,
                                       @Param("competitionId") Integer competitionId,
-                                      @Param("userId") Integer userId);
+                                      @Param("userId") Integer userId,
+                                      @Param("now") LocalDateTime now);
     // 更新总提交数
     @Update("UPDATE problems SET submission_number = submission_number + 1 WHERE problem_id = #{problemId}")
     int incrementSubmission(@Param("problemId") Integer problemId);

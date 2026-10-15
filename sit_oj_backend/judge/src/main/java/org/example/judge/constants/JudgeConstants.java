@@ -27,7 +27,7 @@ public class JudgeConstants {
             // JVM 通过 -Xmx 自行管理堆内存，但 JVM 总内存（堆+Metaspace+JVM自身）会超过 max_memory
             // 缺少此标志时沙箱会严格限制内存导致 Java 进程被 kill → RE
             put("memory_limit_check_only", 1);
-            put("env", new String[]{"LANG=en_US.UTF-8", "LANGUAGE=en_US:en", "LC_ALL=en_US.UTF-8"});
+            put("env", new String[]{"LANG=C.UTF-8", "LANGUAGE=en_US:en", "LC_ALL=C.UTF-8"});
         }});
     }};
 

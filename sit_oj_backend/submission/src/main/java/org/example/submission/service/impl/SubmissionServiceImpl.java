@@ -7,7 +7,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.example.common.dto.JudgeMessage;
 import org.example.common.utils.Result;
 import org.example.submission.entity.Submission;
 import org.example.submission.feign.CompetitionFeignClient;
@@ -15,14 +14,11 @@ import org.example.submission.feign.JudgeFeignClient;
 import org.example.submission.feign.ProblemFeignClient;
 import org.example.submission.feign.UserFeignClient;
 import org.example.submission.mapper.SubmissionMapper;
-import org.example.submission.messaging.JudgeProducer;
 import org.example.submission.service.SubmissionService;
 import org.example.submission.utils.JwtUtils;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import jakarta.annotation.PostConstruct;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.HashMap;
 import java.util.List;
@@ -44,23 +40,16 @@ public class SubmissionServiceImpl extends ServiceImpl<SubmissionMapper, Submiss
     private final JwtUtils jwtUtils;
     private final SubmissionMapper submissionMapper;
     private final CompetitionFeignClient competitionFeignClient;
-    private final JudgeProducer judgeProducer;
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
+    @Transactional
     public Submission handleSubmission(Submission submission) {
         // 1. 落库，状态 = Pending
         saveInitialData(submission);
 
-        // 2. 发送 RabbitMQ 消息到判题队列（替代原来的 @Async + Feign）
-        JudgeMessage msg = JudgeMessage.builder()
-                .submissionId(submission.getSubmissionId())
-                .userId(submission.getUserId())
-                .problemId(submission.getProblemId())
-                .competitionId(submission.getCompetitionId())
-                .codeContent(submission.getCodeContent())
-                .language(submission.getLanguage())
-                .build();
-        judgeProducer.sendJudgeRequest(msg);
+        // 与提交记录在同一数据库事务中保存待发送任务；后台发布器负责重试。
+        jdbcTemplate.update("INSERT INTO judge_outbox (submission_id) VALUES (?)", submission.getSubmissionId());
 
         // 3. 立即返回，前端通过轮询获取判题结果
         return submission;
@@ -72,51 +61,6 @@ public class SubmissionServiceImpl extends ServiceImpl<SubmissionMapper, Submiss
         this.save(submission);
     }
 
-    /**
-     * 启动时 + 每30秒扫描一次 Pending 提交，补偿推送至 RabbitMQ
-     */
-    @PostConstruct
-    public void rescanPendingOnStartup() {
-        resendPendingSubmissions();
-    }
-
-    @Scheduled(fixedDelay = 30000)
-    public void resendPendingSubmissions() {
-        try {
-            java.util.List<Submission> pending = this.lambdaQuery()
-                    .eq(Submission::getStatus, "Pending")
-                    .or()
-                    .eq(Submission::getStatus, "JUDGING")
-                    .list();
-            for (Submission sub : pending) {
-                // 只重试提交时间在 2 小时以内的
-                if (sub.getSubmissionTime() != null) {
-                    long minutes = java.time.Duration.between(sub.getSubmissionTime(), java.time.LocalDateTime.now()).toMinutes();
-                    if (minutes > 120) continue;
-                }
-                try {
-                    JudgeMessage msg = JudgeMessage.builder()
-                            .submissionId(sub.getSubmissionId())
-                            .userId(sub.getUserId())
-                            .problemId(sub.getProblemId())
-                            .competitionId(sub.getCompetitionId())
-                            .codeContent(sub.getCodeContent())
-                            .language(sub.getLanguage())
-                            .build();
-                    judgeProducer.sendJudgeRequest(msg);
-                    log.info("补偿推送判题请求: submissionId={}", sub.getSubmissionId());
-                } catch (Exception e) {
-                    log.error("补偿推送失败: submissionId={}", sub.getSubmissionId(), e);
-                }
-            }
-        } catch (Exception e) {
-            log.error("扫描Pending提交失败", e);
-        }
-    }
-
-    /**
-     * 分页查询提交列表
-     */
     @Override
     public IPage<Submission> getSubmissionList(Integer current, Integer size, Integer problemId, String role, Integer currentUserId) {
         Page<Submission> pageParam = new Page<>(current, size);

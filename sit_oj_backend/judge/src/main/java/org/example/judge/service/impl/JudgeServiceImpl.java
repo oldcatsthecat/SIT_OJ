@@ -20,10 +20,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 
 @Slf4j
 @Service
 public class JudgeServiceImpl implements JudgeService {
+
+    // RabbitMQ 消费者和旧同步接口共用门限，避免绕过队列造成额外判题并发。
+    private final Semaphore judgeSlots = new Semaphore(2, true);
 
     @Autowired
     private RestTemplate restTemplate;
@@ -42,6 +46,7 @@ public class JudgeServiceImpl implements JudgeService {
      */
     @Override
     public JudgeResultMessage processJudge(JudgeMessage message) {
+        judgeSlots.acquireUninterruptibly();
         try {
             // 1. 获取题目信息
             Map<String, Object> problem = fetchProblem(message.getProblemId());
@@ -88,11 +93,14 @@ public class JudgeServiceImpl implements JudgeService {
                     .status("SE")
                     .errorMessage("判题异常: " + e.getMessage())
                     .build();
+        } finally {
+            judgeSlots.release();
         }
     }
 
     @Override
     public JudgeResultResponse processJudge(Integer submissionId) {
+        judgeSlots.acquireUninterruptibly();
         try {
             // 1. 数据准备 (内部私有方法实现)
             Map<String, Object> submission = fetchSubmission(submissionId);
@@ -119,6 +127,8 @@ public class JudgeServiceImpl implements JudgeService {
 
         } catch (Exception e) {
             return JudgeResultResponse.builder().status("SE").errorMessage(e.getMessage()).build();
+        } finally {
+            judgeSlots.release();
         }
     }
 
