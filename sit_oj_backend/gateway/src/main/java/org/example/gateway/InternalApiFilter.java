@@ -21,13 +21,18 @@ public class InternalApiFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        String path = exchange.getRequest().getURI().getPath();
-        if (path.contains("/inner/") || path.contains("/internal/")) {
+        String path = exchange.getRequest().getURI().getRawPath();
+        if (path.contains("%") || path.contains(";") || path.contains("\\") || path.contains("//")
+                || path.matches(".*/\\.\\.?(?:/.*)?")
+                || path.matches(".*/(?:inner|internal)(?:/.*)?")
+                || path.startsWith("/judge/") || path.equals("/judge")
+                || path.equals("/admin/judge/judge_server_heartbeat")) {
             log.warn("拦截非法外部请求: {}", path);
             exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
             return exchange.getResponse().setComplete();
         }
-        return chain.filter(exchange);
+        return chain.filter(exchange.mutate().request(exchange.getRequest().mutate()
+                .headers(headers -> headers.remove("X-OJ-Internal-Key")).build()).build());
     }
 
     @Override

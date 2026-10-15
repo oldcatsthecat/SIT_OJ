@@ -16,6 +16,20 @@ import java.util.List;
 @Service
 public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> implements ProblemService {
 
+    @Override
+    public Problem getAccessibleProblem(Integer id, Integer competitionId, Integer userId, String role) {
+        Problem problem = getById(id);
+        boolean admin = "ADMIN".equals(role);
+        if (problem == null || (!admin && !Boolean.TRUE.equals(problem.getIsPublic())
+                && (competitionId == null || userId == null
+                || baseMapper.countAuthorizedContestProblem(id, competitionId, userId) == 0))) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "题目不存在或无权访问");
+        }
+        // Public responses must never contain judge source, including for public problems.
+        if (!admin) problem.setSpjCode(null);
+        return problem;
+    }
+
     @Transactional
     public void updateStats(Integer problemId, boolean isAccepted) {
         this.update(new UpdateWrapper<Problem>()
@@ -50,6 +64,7 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
         }
 
         // 2. 如果用户已登录，处理 isSolved 字段
+        if (!"ADMIN".equals(role)) page.getRecords().forEach(p -> p.setSpjCode(null));
         if (userId != null && !page.getRecords().isEmpty()) {
             List<Integer> acIds = this.baseMapper.selectAcceptedProblemIds(userId);
             if (acIds != null && !acIds.isEmpty()) {

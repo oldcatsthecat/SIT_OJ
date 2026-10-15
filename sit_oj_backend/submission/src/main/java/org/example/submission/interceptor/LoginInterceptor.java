@@ -38,7 +38,7 @@ public class LoginInterceptor implements HandlerInterceptor {
                 return true;
             } catch (Exception e) {
                 // Token 解析失败时不抛异常，由后续逻辑判断
-                System.err.println("Token 解析异常: " + e.getMessage());
+                System.err.println("Token 解析失败");
             }
         }
         return true;

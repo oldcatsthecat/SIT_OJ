@@ -56,7 +56,19 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
 
     @Override
     public Competition getCompetitionDetail(Integer id, Integer userId) {
-        System.out.println("DEBUG: 正在查询比赛详情，ID=" + id + ", 当前用户ID=" + userId);
+        return getCompetitionDetail(id, userId, null);
+    }
+
+    @Override
+    public boolean canAccessCompetition(Integer id, Integer userId) {
+        Competition competition = getById(id);
+        return competition != null && userId != null && competition.getStartTime() != null
+                && !LocalDateTime.now().isBefore(competition.getStartTime())
+                && participationService.checkRegistration(id, userId);
+    }
+
+    @Override
+    public Competition getCompetitionDetail(Integer id, Integer userId, String role) {
 
         // 1. 获取比赛基本信息
         Competition competition = baseMapper.selectById(id);
@@ -64,6 +76,16 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
 
         // 2. 从中间表拿到所有题目 ID
         List<Integer> problemIds = baseMapper.selectProblemIdsByCompetitionId(id);
+        boolean registered = userId != null && participationService.checkRegistration(id, userId);
+        competition.setIsRegistered(registered);
+        boolean canView = "ADMIN".equals(role) || (registered && competition.getStartTime() != null
+                && !LocalDateTime.now().isBefore(competition.getStartTime()));
+        if (!canView) {
+            // Keep only IDs for public scoreboard columns; never send titles, statements or SPJ source.
+            competition.setProblems(problemIds == null ? List.of() : problemIds.stream()
+                    .map(pid -> (Object) Map.of("problemId", pid)).collect(Collectors.toList()));
+            return competition;
+        }
 
         // --- 新增逻辑：获取该用户在本次比赛中已通过的题目 ID 集合 ---
         java.util.Set<Integer> solvedProblemIds = new java.util.HashSet<>();
@@ -87,10 +109,12 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                         if (prob instanceof java.util.Map) {
                             java.util.Map<String, Object> probMap = (java.util.Map<String, Object>) prob;
                             // 动态注入 isSolved 字段
-                            probMap.put("isSolved", solvedProblemIds.contains(pid));
-                            problemDetails.add(probMap);
+                            Map<String, Object> safeProblem = new HashMap<>(probMap);
+                            safeProblem.remove("spjCode");
+                            safeProblem.put("isSolved", solvedProblemIds.contains(pid));
+                            problemDetails.add(safeProblem);
                         } else {
-                            problemDetails.add(prob);
+                            throw new IllegalStateException("Unexpected problem response");
                         }
                     }
                 } catch (Exception e) {
@@ -120,7 +144,12 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
 
         LocalDateTime now = LocalDateTime.now();
         if (now.isBefore(comp.getStartTime())) return Result.error("比赛尚未开始");
-        if (now.isAfter(comp.getEndTime())) return Result.error("比赛已结束");
+        if (!now.isBefore(comp.getEndTime())) return Result.error("比赛已结束");
+        if (userId == null || !participationService.checkRegistration(competitionId, userId)) return Result.error("请先报名比赛");
+        List<Integer> allowedProblems = baseMapper.selectProblemIdsByCompetitionId(competitionId);
+        if (allowedProblems == null || !allowedProblems.contains(problemId)) return Result.error("题目不属于本比赛");
+        org.example.common.security.SubmissionInput.validate(problemId, code);
+        language = org.example.common.security.SubmissionInput.language(language);
 
         // 2. 构造参数（注意：这里增加一个标识，告诉判题服务这是异步处理）
         Map<String, Object> submissionParams = new HashMap<>();

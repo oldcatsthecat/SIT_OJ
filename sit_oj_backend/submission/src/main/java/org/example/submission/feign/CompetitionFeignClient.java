@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestParam;
  */
 @FeignClient(name = "competition", fallbackFactory = CompetitionFeignClientFallback.class)
 public interface CompetitionFeignClient {
+    @GetMapping("/competitions/inner/{id}/access")
+    Result<Boolean> checkAccess(@PathVariable("id") Integer id, @RequestParam("userId") Integer userId);
 
     /**
      * 更新比赛的排名统计数据

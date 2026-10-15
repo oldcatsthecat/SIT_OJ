@@ -1,86 +1,42 @@
 # SIT-OJ
-## 部署
 
-### 建议配置
-运行内存4GB及以上
-2核CPU
+Vue 前端、Spring Boot 微服务和 QingdaoU JudgeServer 组成的在线评测系统。
 
-### 部署环境
-Ubuntu20.04 LTS 64bit
+## 安全部署
 
-### 安装依赖
+**2026-10-10 之前公开过的 JWT、数据库、判题和邮箱凭证不能继续使用。**
+请先阅读 [安全部署与旧站迁移](SECURITY-DEPLOY.md)，完成凭证轮换后再开放公网。
 
-```
-sudo apt update && sudo apt-get install -y vim python3-pip curl git
-pip3 install --upgrade pip
-pip install --upgrade requests
-sudo apt install -y openjdk-17-jdk
-sudo apt install -y maven
-```
+请求审计已挂载到宿主机 `data/logs/`。按提交编号、账号或 auth 指纹排查的命令见 [请求审计与持久化日志](AUDIT-LOGGING.md)；日志记录经过验签的账号以及尝试冒用的用户 ID，不保存完整登录令牌。
 
-### 安装docker
+不使用 GitHub 发布时，参见 [Windows 通过 SSH 上传与部署](SSH-DEPLOY.md)，保留服务器现有 `.env` 和 `data/`。
 
-```
-sudo curl -sSL https://get.daocloud.io/docker | sh
-```
-如果无法通过该方法安装docker，请查阅相关文档
+环境：Ubuntu、Java 17、Maven、Docker Engine 与 Docker Compose v2、Python 3。开发前端另需 Node.js。
 
-### 安装docker compose 新版
+新安装或本地开发可运行：
 
-```
-# 1. 创建插件存放目录（如果不存在）
-mkdir -p ~/.docker/cli-plugins/
-# 2. 从官方 GitHub 下载最新版（以 v2.20.2 为例，建议根据官网查最新版本号）
-curl -SL https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-linux-x86_64 -o ~/.docker/cli-plugins/docker-compose
-# 3. 给下载好的文件增加执行权限
-chmod +x ~/.docker/cli-plugins/docker-compose
-# 4. 将它同步到系统全局目录，这样 root 用户在任何位置都能识别
-sudo mkdir -p /usr/local/lib/docker/cli-plugins
-sudo cp ~/.docker/cli-plugins/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
-docker compose version
-```
-最后一步如果返回如果返回 Docker Compose version v2.x.x，说明安装成功。
-
-### 开启swap
-
-```
-sudo fallocate -l 2G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-# 永久生效
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/hosts
+```bash
+node ops/generate-secrets.mjs
 ```
 
-### 安装部署
+它生成被 Git 忽略的私有 `.env`，不会覆盖已有文件。已有部署先按[密钥修改与迁移说明](SECURITY-DEPLOY.md)准备最终的新值；当前本地 `.env` 已按要求恢复旧凭证作对照，不能原样用于安全部署，新随机值保存在私有 `.secrets/` 备份中。QQ 邮箱授权码必须自行撤销旧值并重新申请，默认关闭发信。
 
-```
-git clone https://github.com/oldcatsthecat/SIT_OJ.git
-或者git clone https://gitee.com/xiang-jiating/sit_-oj.git
-cd SIT_OJ
-chmod +x deploy.sh
-./deploy.sh
-```
+保留旧容器，不要先执行 `docker compose down`。完成 `.env` 修改后，在服务器的项目目录执行：
 
-### 克隆并合并（防止克隆失效），适用于重新克隆
-
-```
-cd SIT_OJ
-ls | grep -v "^data$" | xargs rm -rf
-git clone https://github.com/oldcatsthecat/SIT_OJ.git ../SIT_OJ_TMP
-或者git clone https://gitee.com/xiang-jiating/sit_-oj.git ../SIT_OJ_TMP
-rsync -av --ignore-existing --exclude='.git' ../SIT_OJ_TMP/ ./
-rm -rf ../SIT_OJ_TMP
+```bash
+chmod 600 .env
+bash deploy.sh
 ```
 
-# 注意docker compose部署只用这个命令，不要带横杠
+旧站部署会先备份当前日志和数据库，再更新已有数据库与队列中的密码。不要删除 `data/` 或使用重建数据库的方法更换密码。发布包需包含 `sit_oj_backend/frontend/dist`；修改前端后需重新构建并同步这个目录。
 
-```
-docker compose up -d --build
+现有用户表增加账户禁用字段时，请先按[数据库迁移说明](DATABASE-MIGRATION.md)备份并迁移，再部署新版用户服务。
+
+## 回归验证
+
+```bash
+mvn test -f sit_oj_backend/pom.xml
+python3 -m unittest discover -s ops -p 'test_secure_deploy.py'
 ```
 
-
-## hint
-```
-暂时什么也没有，希望能做大做强--SIT算法竞赛社特供版，judgeServer用的是QingDaoOj的测评机后端，还没重写
-```
+前端源码在 `sit_oj_frontend`，部署产物在 `sit_oj_backend/frontend/dist`。两者均纳入版本管理；`node_modules` 和前端临时 `dist` 不提交。

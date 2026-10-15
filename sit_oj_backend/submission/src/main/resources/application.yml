@@ -6,8 +6,8 @@ spring:
     name: submission
   datasource:
     url: jdbc:mysql://localhost:3306/sit_oj?useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
-    username: root
-    password: 13575877459hhh
+    username: ${DB_USERNAME:oj_app}
+    password: ${DB_PASSWORD}
   cloud:
     nacos:
       discovery:
@@ -16,7 +16,7 @@ spring:
     host: ${SPRING_RABBITMQ_HOST:localhost}
     port: 5672
     username: ${SPRING_RABBITMQ_USERNAME:oj_admin}
-    password: ${SPRING_RABBITMQ_PASSWORD:oj_rabbit_2026}
+    password: ${RABBITMQ_PASSWORD}
     listener:
       simple:
         acknowledge-mode: manual
@@ -65,5 +65,5 @@ mybatis-plus:
     map-underscore-to-camel-case: true
 
 jwt:
-  secret: SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
+  secret: ${JWT_SECRET}
   expiration: 86400000

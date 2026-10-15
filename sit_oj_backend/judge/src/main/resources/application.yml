@@ -12,7 +12,7 @@ spring:
     host: ${SPRING_RABBITMQ_HOST:localhost}
     port: 5672
     username: ${SPRING_RABBITMQ_USERNAME:oj_admin}
-    password: ${SPRING_RABBITMQ_PASSWORD:oj_rabbit_2026}
+    password: ${RABBITMQ_PASSWORD}
     listener:
       simple:
         acknowledge-mode: auto
@@ -22,8 +22,8 @@ spring:
 
 oj:
   judge:
-    server-url: http://123.60.72.80:8080
-    token: CHANGE_THIS
+    server-url: ${OJ_JUDGE_SERVER_URL:http://localhost:8080}
+    token: ${OJ_JUDGE_TOKEN}
 
 # Resilience4j 熔断（保护外部判题机调用）
 resilience4j:
@@ -45,5 +45,5 @@ resilience4j:
         timeout-duration: 60s
 
 jwt:
-  secret: SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
+  secret: ${JWT_SECRET}
   expiration: 86400000

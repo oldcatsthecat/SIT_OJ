@@ -12,6 +12,8 @@ import java.util.Map;
 public interface CompetitionService extends IService<Competition> {
     // 获取比赛详情（包含关联题目和用户状态）
     Competition getCompetitionDetail(Integer competitionId, Integer userId);
+    Competition getCompetitionDetail(Integer competitionId, Integer userId, String role);
+    boolean canAccessCompetition(Integer competitionId, Integer userId);
 
     // 获取排名列表（分页），返回 {records: [...], total: N}
     Map<String, Object> getRanklist(Integer competitionId, Integer current, Integer size);

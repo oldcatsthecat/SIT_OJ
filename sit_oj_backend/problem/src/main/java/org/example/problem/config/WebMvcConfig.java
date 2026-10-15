@@ -18,10 +18,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         // 1. 所有的题目接口都尝试解析身份
         registry.addInterceptor(loginInterceptor)
-                .addPathPatterns("/problems/**", "/api/admin/problems/**");
+                .addPathPatterns("/problems/**", "/admin/**");
 
         // 2. 所有的管理接口强制校验 ADMIN 角色
         registry.addInterceptor(adminInterceptor)
-                .addPathPatterns("/api/admin/problems/**");
+                .addPathPatterns("/admin/**");
     }
 }

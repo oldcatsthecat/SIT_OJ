@@ -24,26 +24,68 @@ public class SubmissionController {
     @Autowired
     private SubmissionService submissionService;
 
+    @Autowired
+    private org.example.submission.feign.ProblemFeignClient problemFeignClient;
+    @Autowired
+    private org.example.submission.service.SubmissionRateLimiter rateLimiter;
+
+    private Integer requireUser(HttpServletRequest request) {
+        try {
+            Integer id = submissionService.getUserIdFromToken(request.getHeader("Authorization"));
+            if (id != null && id > 0) return id;
+        } catch (Exception ignored) { }
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED, "请先登录");
+    }
+
+    private Submission cleanSubmission(Submission input, Integer userId, Integer competitionId) {
+        org.example.common.security.SubmissionInput.validate(input.getProblemId(), input.getCodeContent());
+        Submission clean = new Submission();
+        clean.setUserId(userId);
+        clean.setProblemId(input.getProblemId());
+        clean.setCompetitionId(competitionId);
+        clean.setCodeContent(input.getCodeContent());
+        clean.setLanguage(org.example.common.security.SubmissionInput.language(input.getLanguage()));
+        clean.setSubmissionTime(LocalDateTime.now());
+        return clean;
+    }
+
     /**
      * 提交题目
      * 返回 Result<Submission>，前端通过 res.data 拿到包含状态的结果
      */
     @PostMapping("/submit")
     public Result doSubmit(@RequestBody Submission submission, HttpServletRequest request) {
-        // 1. 安全性检查：从 Token 获取真实用户 ID，防止前端伪造
-        if (submission.getUserId() == null) {
-            Integer loginUserId = submissionService.getUserIdFromToken(request.getHeader("Authorization"));
-            if (loginUserId == null) return Result.error("登录过期");
-            submission.setUserId(loginUserId);
+        org.example.common.security.AuditContext.submissionAttempt(request, submission.getUserId(),
+                submission.getProblemId(), submission.getCompetitionId(), submission.getLanguage());
+        Integer userId = requireUser(request);
+        if (submission.getCompetitionId() != null) throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST, "请从比赛页面提交");
+        Submission clean = cleanSubmission(submission, userId, null);
+        Map<String, Object> problem = problemFeignClient.getProblemById(clean.getProblemId());
+        String role = submissionService.getUserRoleFromToken(request.getHeader("Authorization"));
+        if (problem == null || problem.get("problemId") == null ||
+                (!"ADMIN".equals(role) && !Boolean.TRUE.equals(problem.get("isPublic")))) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "题目不存在或无权访问");
         }
+        rateLimiter.check(userId);
+        Submission saved = submissionService.handleSubmission(clean);
+        if (saved != null) org.example.common.security.AuditContext.submissionSaved(request, saved.getSubmissionId(), userId);
+        return Result.success(saved);
+    }
 
-        LocalDateTime now = LocalDateTime.now();
-        submission.setSubmissionTime(now);
-        // 2. 调用 Service 执行判题逻辑
-        Submission result = submissionService.handleSubmission(submission);
-
-
-        return Result.success(result);
+    @PostMapping("/inner/submit")
+    public Result submitFromCompetition(@RequestBody Submission input) {
+        var request = org.example.common.security.AuditContext.currentRequest();
+        org.example.common.security.AuditContext.submissionAttempt(request, null,
+                input.getProblemId(), input.getCompetitionId(), input.getLanguage());
+        if (input.getUserId() == null || input.getUserId() <= 0 || input.getCompetitionId() == null) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "无效的比赛提交");
+        }
+        Submission clean = cleanSubmission(input, input.getUserId(), input.getCompetitionId());
+        rateLimiter.check(clean.getUserId());
+        Submission saved = submissionService.handleSubmission(clean);
+        if (saved != null) org.example.common.security.AuditContext.submissionSaved(request, saved.getSubmissionId(), clean.getUserId());
+        return Result.success(saved);
     }
 
     /**
@@ -52,17 +94,17 @@ public class SubmissionController {
      */
     @GetMapping("/{id}")
     public Result getSubmissionById(@PathVariable("id") Integer id, HttpServletRequest request) {
-        Integer loginUserId = submissionService.getUserIdFromToken(request.getHeader("Authorization"));
+        Integer loginUserId = requireUser(request);
         String role = submissionService.getUserRoleFromToken(request.getHeader("Authorization"));
         Submission submission = submissionService.getById(id);
         if (submission == null) return Result.error("记录不存在");
 
-        if(role.equals("ADMIN"))
+        if("ADMIN".equals(role))
         {
             return Result.success(submission);
         }
 
-        if (loginUserId != null && !submission.getUserId().equals(loginUserId)) {
+        if (!loginUserId.equals(submission.getUserId())) {
             return Result.error("无权查看");
         }
 
@@ -85,8 +127,8 @@ public class SubmissionController {
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) Integer problemId,
-            @RequestAttribute(value = "userId") Integer userId,
-            @RequestAttribute(value = "userRole") String role) {
+            @RequestAttribute(value = "userId", required = false) Integer userId,
+            @RequestAttribute(value = "userRole", required = false) String role) {
 
         // 直接调用 Service 层封装的方法
         IPage<Submission> result = submissionService.getSubmissionList(current, size, problemId,role,userId);

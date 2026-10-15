@@ -27,8 +27,15 @@ public class ProblemController {
     }
 
     @GetMapping("/{id}")
-    public Problem getProblemById(@PathVariable Integer id) {
-        // 使用 service.getById() 获取单条数据
+    public Problem getProblemById(@PathVariable Integer id,
+                                  @RequestParam(required = false) Integer competitionId,
+                                  @RequestAttribute(value = "userId", required = false) Integer userId,
+                                  @RequestAttribute(value = "userRole", required = false) String role) {
+        return problemService.getAccessibleProblem(id, competitionId, userId, role);
+    }
+
+    @GetMapping("/inner/{id}")
+    public Problem getInternalProblem(@PathVariable Integer id) {
         return problemService.getById(id);
     }
 

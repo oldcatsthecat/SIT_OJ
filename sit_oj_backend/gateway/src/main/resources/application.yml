@@ -19,7 +19,7 @@ spring:
       # 开启从注册中心动态发现服务
       discovery:
         locator:
-          enabled: true
+          enabled: false
       # 路由配置
       routes:
         - id: problem

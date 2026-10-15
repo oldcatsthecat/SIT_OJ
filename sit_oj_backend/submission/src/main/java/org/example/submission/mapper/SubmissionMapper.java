@@ -15,7 +15,7 @@ public interface SubmissionMapper extends BaseMapper<Submission> {
     @Select("<script>" +
             "SELECT s.* FROM submissions s " +
             "INNER JOIN problems p ON s.problem_id = p.problem_id " +
-            "WHERE p.is_public = 1 " + // 核心过滤：只看公开题目的提交
+            "WHERE p.is_public = 1 AND s.competition_id IS NULL " +
             "<if test='problemId != null'>" +
             "  AND s.problem_id = #{problemId} " +
             "</if>" +
