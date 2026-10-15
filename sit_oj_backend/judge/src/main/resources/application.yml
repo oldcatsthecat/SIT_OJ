@@ -13,12 +13,16 @@ spring:
     port: 5672
     username: ${SPRING_RABBITMQ_USERNAME:oj_admin}
     password: ${RABBITMQ_PASSWORD}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
     listener:
       simple:
         acknowledge-mode: auto
         prefetch: 1        # 一次只取一条，防止内存溢出
-        concurrency: 1     # 最少消费者数
-        max-concurrency: 2 # 最大消费者数（限制并发判题数）
+        concurrency: 2     # 固定两个判题消费者
+        max-concurrency: 2 # 多余请求留在 RabbitMQ 队列中
 
 oj:
   judge:

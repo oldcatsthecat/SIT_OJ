@@ -14,25 +14,21 @@ import java.util.List;
 public interface ParticipationMapper extends BaseMapper<Participation> {
 
     /**
-     * 获取比赛排名（ACM模式：解题数降序，罚时升序）
-     * 关联 users 表获真名，比赛使用真名
+     * 获取所有报名者的比赛排名（ACM模式：解题数降序，罚时升序）
+     * 关联 users 表获取姓名，未提交者也显示在榜单中
      */
     @Select("SELECT p.*, u.username , u.real_name FROM participations p " +
-            "JOIN users u ON p.user_id = u.id " +
+            "LEFT JOIN users u ON p.user_id = u.id " +
             "WHERE p.competition_id = #{competitionId} " +
-            "AND EXISTS (SELECT 1 FROM competition_submission_stats s " +
-            "WHERE s.user_id = p.user_id AND s.competition_id = p.competition_id) " +
-            "ORDER BY p.solved_count DESC, p.total_penalty ASC")
+            "ORDER BY p.solved_count DESC, p.total_penalty ASC, p.user_id ASC")
     List<Participation> getRanklist(@Param("competitionId") Integer competitionId);
 
     /**
      * 分页获取比赛排名
      */
     @Select("SELECT p.*, u.username , u.real_name FROM participations p " +
-            "JOIN users u ON p.user_id = u.id " +
+            "LEFT JOIN users u ON p.user_id = u.id " +
             "WHERE p.competition_id = #{competitionId} " +
-            "AND EXISTS (SELECT 1 FROM competition_submission_stats s " +
-            "WHERE s.user_id = p.user_id AND s.competition_id = p.competition_id) " +
-            "ORDER BY p.solved_count DESC, p.total_penalty ASC")
+            "ORDER BY p.solved_count DESC, p.total_penalty ASC, p.user_id ASC")
     IPage<Participation> getRanklistPage(Page<Participation> page, @Param("competitionId") Integer competitionId);
 }

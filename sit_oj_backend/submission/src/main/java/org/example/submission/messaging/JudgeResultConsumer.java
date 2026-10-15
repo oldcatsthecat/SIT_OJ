@@ -7,6 +7,7 @@ import org.example.common.dto.JudgeResultMessage;
 import org.example.submission.entity.Submission;
 import org.example.submission.feign.CompetitionFeignClient;
 import org.example.submission.feign.ProblemFeignClient;
+import org.example.submission.mapper.SubmissionMapper;
 import org.example.submission.service.SubmissionService;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
@@ -28,6 +29,7 @@ public class JudgeResultConsumer {
     private final SubmissionService submissionService;
     private final ProblemFeignClient problemFeignClient;
     private final CompetitionFeignClient competitionFeignClient;
+    private final SubmissionMapper submissionMapper;
 
     @RabbitListener(queues = JUDGE_RESULT_QUEUE, concurrency = "2-4")
     public void handleJudgeResult(JudgeResultMessage result, Channel channel,
@@ -36,14 +38,11 @@ public class JudgeResultConsumer {
             log.info("收到判题结果: submissionId={}, status={}", result.getSubmissionId(), result.getStatus());
 
             // 1. 更新 submission 状态和判题详情
-            Submission submission = new Submission();
-            submission.setSubmissionId(result.getSubmissionId());
-            submission.setStatus(result.getStatus());
-            submission.setTimeCost(result.getTimeCost());
-            submission.setMemoryCost(result.getMemoryCost());
-            submission.setJudgeInfo(result.getJudgeInfo());
-            submission.setErrorMessage(result.getErrorMessage());
-            submissionService.updateById(submission);
+            if (submissionMapper.completePendingJudge(result) == 0) {
+                log.info("跳过重复判题结果: submissionId={}", result.getSubmissionId());
+                channel.basicAck(tag, false);
+                return;
+            }
 
             // 2. 如果是比赛提交，回调 Competition 模块更新 ACM 分数
             if (result.getCompetitionId() != null) {

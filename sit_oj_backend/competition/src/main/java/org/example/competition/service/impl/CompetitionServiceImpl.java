@@ -384,17 +384,19 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         Competition comp = this.getById(competitionId);
         boolean isFrozen = comp != null && isInFreezePeriod(comp);
 
-        // 从 MySQL 获取总参赛人数（兜底用）
+        // 所有报名者都进入榜单，包括尚未提交的用户
         Long totalFromDb = participationMapper.selectCount(
                 new LambdaQueryWrapper<Participation>()
                         .eq(Participation::getCompetitionId, competitionId));
 
-        // 1. 尝试从 Redis 获取排行榜（分页）
+        // Redis 只在人数与报名表一致时用于分页，否则会漏掉尚未提交的用户
         try {
-            List<Map<String, Object>> redisRanks = rankingService.getRankList(competitionId, start, end);
+            Long redisTotal = rankingService.getParticipantCount(competitionId);
+            List<Map<String, Object>> redisRanks = Objects.equals(redisTotal, totalFromDb)
+                    ? rankingService.getRankList(competitionId, start, end)
+                    : Collections.emptyList();
             if (!redisRanks.isEmpty()) {
-                Long redisTotal = rankingService.getParticipantCount(competitionId);
-                long total = Math.max(redisTotal != null ? redisTotal : 0, totalFromDb);
+                long total = totalFromDb;
 
                 List<Integer> userIds = redisRanks.stream()
                         .map(m -> (Integer) m.get("userId")).toList();

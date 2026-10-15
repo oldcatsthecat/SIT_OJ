@@ -28,7 +28,7 @@
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="真实姓名" prop="realName">
-              <el-input v-model="regForm.realName" placeholder="用于颁发证书" />
+              <el-input v-model="regForm.realName" placeholder="用于颁发证书，最多50个字符" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -70,6 +70,7 @@ import { ref } from 'vue';
 import { userApi } from '@/api';
 import { ElMessage } from 'element-plus';
 import { useRouter } from 'vue-router';
+import { isValidRealName } from '@/utils/realName';
 
 const router = useRouter();
 const regFormRef = ref(null);
@@ -97,7 +98,7 @@ const rules = {
   code: [{required: true, message: '请输入验证码', trigger: 'blur'}],
   realName: [
     {required: true, message: '请输入真实姓名', trigger: 'blur'},
-    {pattern: /^[一-龥]{2,3}$/, message: '姓名需为2~3位中文', trigger: 'blur'}
+    {validator: (_rule, value, callback) => callback(isValidRealName(value) ? undefined : new Error('姓名不能超过50个字符')), trigger: 'blur'}
   ],
   studentId: [{required: true, message: '学号不能为空', trigger: 'blur'}]
 };

@@ -5,12 +5,20 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
+import org.example.common.dto.JudgeResultMessage;
 import org.example.submission.entity.Submission;
 
 import java.util.List;
 import java.util.Map;
 
 public interface SubmissionMapper extends BaseMapper<Submission> {
+
+    @Update("UPDATE submissions SET status = #{result.status}, time_cost = #{result.timeCost}, " +
+            "memory_cost = #{result.memoryCost}, judge_info = #{result.judgeInfo}, " +
+            "error_message = #{result.errorMessage} WHERE submission_id = #{result.submissionId} " +
+            "AND status IN ('Pending', 'JUDGING')")
+    int completePendingJudge(@Param("result") JudgeResultMessage result);
 
     @Select("<script>" +
             "SELECT s.* FROM submissions s " +

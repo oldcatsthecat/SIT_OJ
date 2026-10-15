@@ -452,15 +452,33 @@ const frozenAttempts = ref({});
 
 // 排行榜分页
 const rankPage = reactive({ current: 1, size: 20, total: 0 });
+let rankPollTimer = null;
+let rankRequestId = 0;
+
+const stopRankPolling = () => {
+  if (rankPollTimer) {
+    clearInterval(rankPollTimer);
+    rankPollTimer = null;
+  }
+};
+
+const startRankPolling = () => {
+  stopRankPolling();
+  rankPollTimer = setInterval(() => {
+    fetchRank(rankPage.current);
+  }, 15000);
+};
 
 const isFirstBlood = (problemId, userId) => {
   return firstBloods.value[problemId] === userId;
 };
 
 const fetchRank = async (page = 1) => {
+  const requestId = ++rankRequestId;
   try {
     rankPage.current = page;
     const res = await competitionApi.getRank(compId, { current: page, size: rankPage.size });
+    if (requestId !== rankRequestId) return;
     const payload = res.data?.data || res.data || {};
     rankList.value = payload.records || [];
     rankPage.total = payload.total || 0;
@@ -490,7 +508,11 @@ const fetchRank = async (page = 1) => {
 
 const handleTabChange = (n) => {
   stopSubPolling();
-  if (n === 'rank') fetchRank();
+  stopRankPolling();
+  if (n === 'rank') {
+    fetchRank();
+    startRankPolling();
+  }
   if (n === 'submissions' && canViewProblems.value) fetchCompSubmissions();
   router.replace({query: {...route.query, tab: n}});
 };
@@ -530,11 +552,13 @@ const startTimer = () => {
 onMounted(() => {
   fetchData();
   startTimer();
+  if (activeTab.value === 'rank') startRankPolling();
 });
 
 onUnmounted(() => {
   clearInterval(timer);
   stopSubPolling();
+  stopRankPolling();
 });
 const formatTime = (t) => t ? dayjs(t).format('YYYY-MM-DD HH:mm:ss') : '-';
 </script>

@@ -13,7 +13,8 @@ import org.springframework.context.annotation.Configuration;
 public class RabbitMQConfig {
 
     // ============ 队列名称 ============
-    public static final String JUDGE_REQUEST_QUEUE = "judge.request.queue";
+    public static final String JUDGE_REQUEST_QUEUE = "judge.request.queue.v2";
+    public static final String LEGACY_JUDGE_REQUEST_QUEUE = "judge.request.queue";
     public static final String JUDGE_RESULT_QUEUE  = "judge.result.queue";
 
     // 死信（判题超时或异常）
@@ -22,7 +23,8 @@ public class RabbitMQConfig {
 
     // ============ Exchange & Routing Key ============
     public static final String JUDGE_EXCHANGE             = "judge.exchange";
-    public static final String JUDGE_REQUEST_ROUTING_KEY  = "judge.request";
+    public static final String JUDGE_REQUEST_ROUTING_KEY  = "judge.request.v2";
+    public static final String LEGACY_JUDGE_REQUEST_ROUTING_KEY = "judge.request";
     public static final String JUDGE_RESULT_ROUTING_KEY   = "judge.result";
 
     // ---- Exchange ----
@@ -41,8 +43,16 @@ public class RabbitMQConfig {
     public Queue judgeRequestQueue() {
         return QueueBuilder.durable(JUDGE_REQUEST_QUEUE)
                 .withArgument("x-dead-letter-exchange", JUDGE_DLX)
-                .withArgument("x-dead-letter-routing-key", JUDGE_REQUEST_ROUTING_KEY)
-                .withArgument("x-message-ttl", 120_000)   // 2 分钟未消费视为超时
+                .withArgument("x-dead-letter-routing-key", LEGACY_JUDGE_REQUEST_ROUTING_KEY)
+                .build();
+    }
+
+    @Bean
+    public Queue legacyJudgeRequestQueue() {
+        return QueueBuilder.durable(LEGACY_JUDGE_REQUEST_QUEUE)
+                .withArgument("x-dead-letter-exchange", JUDGE_DLX)
+                .withArgument("x-dead-letter-routing-key", LEGACY_JUDGE_REQUEST_ROUTING_KEY)
+                .withArgument("x-message-ttl", 120_000)
                 .build();
     }
 
@@ -64,6 +74,12 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Binding legacyJudgeRequestBinding() {
+        return BindingBuilder.bind(legacyJudgeRequestQueue())
+                .to(judgeExchange()).with(LEGACY_JUDGE_REQUEST_ROUTING_KEY);
+    }
+
+    @Bean
     public Binding judgeResultBinding() {
         return BindingBuilder.bind(judgeResultQueue())
                 .to(judgeExchange()).with(JUDGE_RESULT_ROUTING_KEY);
@@ -72,7 +88,7 @@ public class RabbitMQConfig {
     @Bean
     public Binding deadLetterBinding() {
         return BindingBuilder.bind(judgeRequestDLQ())
-                .to(deadLetterExchange()).with(JUDGE_REQUEST_ROUTING_KEY);
+                .to(deadLetterExchange()).with(LEGACY_JUDGE_REQUEST_ROUTING_KEY);
     }
 
     // JSON 序列化，避免 JDK 序列化
