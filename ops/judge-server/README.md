@@ -4,6 +4,9 @@ absent. The patch limits each request to one sandbox worker and cancels remainin
 test cases when a CPU or wall-clock timeout is returned. The sandbox itself still
 enforces `max_cpu_time` for each case.
 
+Gunicorn uses threads to serve requests. The sandbox pool starts its worker with
+Python's `spawn` context so it does not inherit locks from those threads.
+
 The judge service runs two RabbitMQ consumers. With one sandbox worker per
 request, this caps the single Compose deployment at two simultaneous judging
 workers; excess submissions stay in `judge.request.queue.v2`. The legacy queue

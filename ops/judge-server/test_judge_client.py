@@ -80,6 +80,14 @@ class FakePool:
         self.joined = True
 
 
+class FakeContext:
+    def __init__(self):
+        self.methods = []
+
+    def Pool(self, processes):
+        return FakePool(processes)
+
+
 class JudgeClientTests(unittest.TestCase):
     def test_original_scheduler_reproduces_eager_execution(self):
         spec = importlib.util.spec_from_file_location("patch_judge_client", Path(__file__).with_name("patch_judge_client.py"))
@@ -103,8 +111,16 @@ class JudgeClientTests(unittest.TestCase):
 
     def run_cases(self, results):
         self.client._judge_one = lambda case: self.record(case, results[case])
-        with patch.object(self.module, "Pool", FakePool):
+        context = FakeContext()
+        with patch.object(self.module, "get_context", return_value=context):
             return self.client.run()
+
+    def test_worker_pool_uses_spawn_context(self):
+        context = FakeContext()
+        self.client._judge_one = lambda case: self.record(case, 0)
+        with patch.object(self.module, "get_context", return_value=context) as get_context:
+            self.client.run()
+        get_context.assert_called_once_with("spawn")
 
     def record(self, case, result):
         self.calls.append(case)
