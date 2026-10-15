@@ -25,7 +25,7 @@ ssh -i "$ojKey" -p $ojPort $ojDestination 'cd /home/ubuntu/sit_oj/SIT_OJ && pwd'
 
 ## 发布范围与顺序
 
-本次发布目标是 `sit_oj_backend/frontend/dist` 的前端文件挂载和 `oj-user` 服务。现有 Compose 文件将 `./sit_oj_backend/frontend/dist` 只读挂载到 `/usr/share/nginx/html`。数据库升级按仓库根目录的 [DATABASE-MIGRATION.md](../../DATABASE-MIGRATION.md) 执行：核对 `users.locked` 是否存在，备份现有 `sit_oj` 数据库，执行一次 `database/migrations/20261015_add_users_locked.sql`，验证计数后再发布 user 服务和前端文件。
+上次发布目标是 `sit_oj_backend/frontend/dist` 的前端文件挂载和 `oj-user` 服务。现有 Compose 文件将 `./sit_oj_backend/frontend/dist` 只读挂载到 `/usr/share/nginx/html`。数据库升级按仓库根目录的 [DATABASE-MIGRATION.md](../../DATABASE-MIGRATION.md) 执行：核对 `users.locked` 是否存在，备份现有 `sit_oj` 数据库，执行一次 `database/migrations/20261015_add_users_locked.sql`，验证计数后再发布 user 服务和前端文件。
 
 私钥仅保留在本机路径，不上传到项目或服务器。服务器的 `.env` 和 `data/` 是运行数据，发布时保留现有内容。
 
@@ -51,4 +51,11 @@ ssh -i "$ojKey" -p $ojPort $ojDestination 'cd /home/ubuntu/sit_oj/SIT_OJ && pwd'
 | `oj-user`、`oj-problem` | 一致 |
 | `oj-gateway`、`oj-submission`、`oj-competition`、`oj-judge-logic` | 不一致：运行镜像中的 JAR 不是服务器当前 `target/` 产物 |
 
-本地没有可供逐项比较的已构建 JAR；源码一致不能证明旧运行镜像由当前源码构建。此次发布范围为前端和 `oj-user`，其余四个服务需在后续全服务发布时重建并复核。数据库现有表已迁移；`database/init.sql` 已与本地同步，但不得对现有数据库执行初始化脚本。
+本地没有可供逐项比较的已构建 JAR；源码一致不能证明旧运行镜像由当前源码构建。上次发布范围为前端和 `oj-user`，其余四个服务需在后续全服务发布时重建并复核。数据库现有表已迁移；`database/init.sql` 已与本地同步，但不得对现有数据库执行初始化脚本。
+
+
+## 2026-10-15 判题可靠性发布
+
+GitHub PR #4 的代码已部署到服务器。迁移前 `judge_outbox` 不存在，786 条提交中待判题记录为 0。执行 `database/migrations/20261015_add_judge_outbox.sql` 前的完整数据库备份保存在 `incident-backups/sit_oj-before-judge-outbox-20261015-194001.sql`（3,212,048 字节）；更新前代码备份保存在 `incident-backups/code-before-judge-reliability-20261015-194413.tar.gz`。迁移后 outbox 行数、未发布行数和待判题提交数均为 0。
+
+已更新前端挂载文件，重建并重启 `oj-user`、`oj-problem`、`oj-submission`、`oj-competition`、`oj-judge-logic` 和 `oj-judge-server`，同时重启网关与前端。服务器 Docker Hub 代理返回 502，Java 服务使用原有应用镜像作为本地基础镜像，替换本机 Maven 构建并通过测试的 JAR；旧镜像保留了 `pre-20261015-judge-reliability` 标签。上线后五个 Java 容器中的 `/app.jar` 与宿主机 `target/*-exec.jar` 哈希一致，判题服务器健康检查通过，Nginx 配置检查通过，首页和题目列表接口返回 200；12 个容器均运行。RabbitMQ 的新 `judge.request.queue.v2` 队列为空，既有死信队列保留 80 条消息，未在本次部署中清理。
