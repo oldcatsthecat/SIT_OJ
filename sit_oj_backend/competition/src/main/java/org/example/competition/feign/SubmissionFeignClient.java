@@ -15,7 +15,7 @@ public interface SubmissionFeignClient {
     /**
      * 使用 Map 传递参数，避免依赖 submission 模块的 Entity
      */
-    @PostMapping("/submissions/submit")
+    @PostMapping("/submissions/inner/submit")
     Result doSubmit(@RequestBody Map<String, Object> submissionData);
 
     @GetMapping("/submissions/inner/stats/{competitionId}")

@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 @FeignClient(value = "problem", fallbackFactory = ProblemFeignClientFallback.class)
 public interface ProblemFeignClient {
 
-    @GetMapping("/problems/{id}")
+    @GetMapping("/problems/inner/{id}")
     java.util.Map<String, Object> getProblemById(@PathVariable("id") Integer id);
 
     // 新增：通知题目服务更新计数

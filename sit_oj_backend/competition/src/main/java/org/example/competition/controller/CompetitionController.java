@@ -38,9 +38,10 @@ public class CompetitionController {
     @GetMapping("/{id}")
     public Result getCompetitionDetail(
             @PathVariable Integer id,
-            @RequestAttribute(value = "userId" , required = false) Integer userId) {
+            @RequestAttribute(value = "userId" , required = false) Integer userId,
+            @RequestAttribute(value = "userRole", required = false) String role) {
 
-        Competition detail = competitionService.getCompetitionDetail(id, userId);
+        Competition detail = competitionService.getCompetitionDetail(id, userId, role);
         if (detail == null) {
             return Result.error("该比赛不存在");
         }
@@ -66,6 +67,8 @@ public class CompetitionController {
             @RequestBody Map<String, Object> submitData,
             HttpServletRequest request) { // 1. 改为直接接收 request 避开注入时的类型转换
 
+        org.example.common.security.AuditContext.submissionAttempt(request, submitData.get("userId"),
+                submitData.get("problemId"), competitionId, submitData.get("language"));
         Object userIdObj = request.getAttribute("userId");
         if (userIdObj == null) return Result.error("未登录");
         Integer userId = Integer.valueOf(String.valueOf(userIdObj));
@@ -106,6 +109,11 @@ public class CompetitionController {
     @GetMapping("/inner/{id}/frozen")
     public Result checkFrozen(@PathVariable Integer id) {
         return Result.success(competitionService.isFrozen(id));
+    }
+
+    @GetMapping("/inner/{id}/access")
+    public Result<Boolean> checkAccess(@PathVariable Integer id, @RequestParam Integer userId) {
+        return Result.success(competitionService.canAccessCompetition(id, userId));
     }
 
 }

@@ -2,7 +2,29 @@
 .idea/
 *.iml
 
+# Deployment credentials and incident backups must never be published.
+.env
+.env.*
+!.env.example
+.secrets/
+.agents/
+.claude/
+skills-lock.json
+incident-backups/
+/data/mysql/
+/data/nacos/
+/data/redis/
+/data/rabbitmq/
+/data/judge_server/
+/data/logs/
+**/*.log
+**/__pycache__/
+
 docs
+!docs/
+docs/*
+!docs/agents/
+!docs/agents/*
 
 # 独立测试工程
 /sit_oj_tests/
@@ -10,7 +32,8 @@ docs
 SIT_OJ-main (未加封榜完整版).zip
 
 /sit_oj_backend/.idea
-/sit_oj_frontend/
+/sit_oj_frontend/dist/
+/sit_oj_frontend/.vscode/
 
 # 忽略后端编译文件
 **/target/

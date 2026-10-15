@@ -11,6 +11,13 @@ import java.util.List;
 
 @Mapper
 public interface ProblemMapper extends BaseMapper<Problem> {
+    @Select("SELECT COUNT(*) FROM competition_problems cp " +
+            "JOIN competitions c ON c.competition_id = cp.competition_id " +
+            "JOIN participations p ON p.competition_id = c.competition_id AND p.user_id = #{userId} " +
+            "WHERE cp.problem_id = #{problemId} AND c.competition_id = #{competitionId} AND c.start_time <= CURRENT_TIMESTAMP")
+    long countAuthorizedContestProblem(@Param("problemId") Integer problemId,
+                                      @Param("competitionId") Integer competitionId,
+                                      @Param("userId") Integer userId);
     // 更新总提交数
     @Update("UPDATE problems SET submission_number = submission_number + 1 WHERE problem_id = #{problemId}")
     int incrementSubmission(@Param("problemId") Integer problemId);

@@ -1,6 +1,6 @@
 DROP DATABASE IF EXISTS sit_oj;
 
-CREATE DATABASE sit_oj CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS sit_oj CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 USE sit_oj;
 
@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
                                      username VARCHAR(50) NOT NULL UNIQUE,
     password VARCHAR(255) DEFAULT NULL,
     role VARCHAR(20) DEFAULT 'USER',
+    locked BOOLEAN NOT NULL DEFAULT FALSE COMMENT '账户是否禁用',
     gender VARCHAR(10),
     real_name VARCHAR(50),
     student_id VARCHAR(20),
@@ -74,7 +75,6 @@ CREATE TABLE IF NOT EXISTS submissions (
     CONSTRAINT fk_sub_problem FOREIGN KEY (problem_id) REFERENCES problems(problem_id) ON DELETE CASCADE,
     CONSTRAINT fk_sub_contest FOREIGN KEY (competition_id) REFERENCES competitions(competition_id) ON DELETE CASCADE
     ) ENGINE=InnoDB;
-
 -- 5. 比赛题目关联表
 CREATE TABLE IF NOT EXISTS competition_problems (
                                                     competition_id INT NOT NULL,

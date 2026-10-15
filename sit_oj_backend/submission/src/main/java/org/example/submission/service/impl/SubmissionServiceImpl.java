@@ -132,6 +132,9 @@ public class SubmissionServiceImpl extends ServiceImpl<SubmissionMapper, Submiss
         }
 
         submissionPage.getRecords().forEach(submission -> {
+            submission.setCodeContent(null);
+            submission.setJudgeInfo(null);
+            submission.setErrorMessage(null);
             try {
                 java.util.Map<String, Object> problem = problemFeignClient.getProblemById(submission.getProblemId());
                 if (problem != null && problem.get("problemName") != null) {
@@ -187,6 +190,12 @@ public class SubmissionServiceImpl extends ServiceImpl<SubmissionMapper, Submiss
 
     @Override
     public IPage<Submission> getCompetitionSubmissions(Integer current, Integer size, Integer competitionId, Integer userId, String role) {
+        if (!"ADMIN".equals(role)) {
+            Result<Boolean> access = userId == null ? null : competitionFeignClient.checkAccess(competitionId, userId);
+            if (access == null || access.getCode() != 200 || !Boolean.TRUE.equals(access.getData())) {
+                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "无权查看比赛提交");
+            }
+        }
         QueryWrapper<Submission> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("competition_id", competitionId)
                 .orderByDesc("submission_id");
@@ -195,7 +204,7 @@ public class SubmissionServiceImpl extends ServiceImpl<SubmissionMapper, Submiss
         IPage<Submission> result = submissionMapper.selectPage(pageParam, queryWrapper);
 
         // 检查封榜状态
-        boolean frozenFlag = false;
+        boolean frozenFlag = true;
         try {
             Result frozenRes = competitionFeignClient.checkFrozen(competitionId);
             if (frozenRes != null && frozenRes.getCode() == 200) {
@@ -207,6 +216,9 @@ public class SubmissionServiceImpl extends ServiceImpl<SubmissionMapper, Submiss
         boolean isAdmin = "ADMIN".equals(role);
 
         result.getRecords().forEach(sub -> {
+            sub.setCodeContent(null);
+            sub.setJudgeInfo(null);
+            sub.setErrorMessage(null);
             try {
                 java.util.Map<String, Object> user = userFeignClient.getUserById(sub.getUserId());
                 if (user != null && user.get("username") != null) {

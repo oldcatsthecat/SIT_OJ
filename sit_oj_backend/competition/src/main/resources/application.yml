@@ -5,9 +5,9 @@ spring:
   application:
     name: competition
   datasource:
-    url: jdbc:mysql://localhost:3306/sit_oj?useUnicode=true&characterEncoding=utf-8&allowMultiQueries=true&useSSL=false&serverTimezone=GMT%2B8
-    username: root
-    password: 13575877459hhh
+    url: jdbc:mysql://localhost:3306/sit_oj?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=GMT%2B8
+    username: ${DB_USERNAME:oj_app}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
@@ -22,7 +22,6 @@ spring:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: org.example.competition.entity
 
@@ -58,5 +57,5 @@ resilience4j:
         base-config: default
 
 jwt:
-  secret: SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
+  secret: ${JWT_SECRET}
   expiration: 86400000

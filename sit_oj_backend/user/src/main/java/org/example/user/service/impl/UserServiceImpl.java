@@ -44,12 +44,28 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Autowired
     private ObjectProvider<UserServiceImpl> selfProvider;
 
+    @Autowired
+    private org.example.user.service.VerificationCodeService verificationCodes;
+
+    @Value("${oj.mail.enabled:false}")
+    private boolean mailEnabled;
+
+    private void validatePassword(String password) {
+        if (password == null || password.length() < 8 || password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72)
+            throw new IllegalArgumentException("密码至少8位且UTF-8长度不超过72字节");
+    }
+
     @Transactional(rollbackFor = Exception.class)
     @Override
     public void updateUserInfo(User user, String code) {
         // 1. 获取数据库中当前用户的原始数据
         User currentUser = this.getById(user.getId());
-        if (currentUser == null) throw new RuntimeException("用户不存在");
+        if (currentUser == null) throw new IllegalArgumentException("用户不存在");
+        if (Boolean.TRUE.equals(currentUser.getLocked())) throw new IllegalArgumentException("账户已禁用");
+        if (user.getEmail() != null && !user.getEmail().equals(currentUser.getEmail())
+                && user.getPassword() != null && !user.getPassword().isEmpty()) {
+            throw new IllegalArgumentException("请分别修改邮箱和密码");
+        }
 
         // 2. 情况 A：请求中包含新邮箱，且与当前邮箱不同
         if (user.getEmail() != null && !user.getEmail().equals(currentUser.getEmail())) {
@@ -73,13 +89,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     // 私有方法：专门处理邮箱变更的冲突与校验
     private void validateAndHandleEmailChange(String newEmail, String code, User currentUser) {
-        if (code == null || code.isEmpty()) throw new RuntimeException("修改邮箱必须提供验证码");
+        newEmail = verificationCodes.normalizeEmail(newEmail);
+        if (code == null || code.isEmpty()) throw new IllegalArgumentException("修改邮箱必须提供验证码");
 
         // 查找占用该邮箱的临时记录（id=4的那种）
         User tempUser = this.getOne(new LambdaQueryWrapper<User>().eq(User::getEmail, newEmail));
-        if (tempUser == null) throw new RuntimeException("请先获取验证码");
+        if (tempUser == null) throw new IllegalArgumentException("请先获取验证码");
 
-        if (!code.equals(tempUser.getEmailCode())) throw new RuntimeException("邮箱验证码错误");
+        if (tempUser.getPassword() != null) throw new IllegalArgumentException("该邮箱已被其他账号绑定");
+        verificationCodes.consume(newEmail, "update", code);
 
         // 验证通过，删除临时占位记录，释放唯一索引
         this.removeById(tempUser.getId());
@@ -88,11 +106,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     // 私有方法：专门处理密码变更校验
     private void validateAndHandlePasswordChange(String newPwd, String code, User currentUser) {
-        if (code == null || code.isEmpty()) throw new RuntimeException("修改密码必须提供验证码");
+        if (code == null || code.isEmpty()) throw new IllegalArgumentException("修改密码必须提供验证码");
 
         // 修改密码校验的是发给“当前用户已绑定邮箱”的验证码
-        if (!code.equals(currentUser.getEmailCode())) throw new RuntimeException("密码重置验证码错误");
-
+        validatePassword(newPwd);
+        verificationCodes.consume(currentUser.getEmail(), "update", code);
         currentUser.setPassword(passwordEncoder.encode(newPwd));
     }
 
@@ -102,8 +120,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         // 1. 提取参数
         String username = (String) params.get("username");
         String password = (String) params.get("password");
-        String email = (String) params.get("email");
+        String email = verificationCodes.normalizeEmail((String) params.get("email"));
         String code = (String) params.get("code");
+        validatePassword(password);
+        if (username == null || !username.matches("[A-Za-z0-9_\\-]{1,32}")) throw new IllegalArgumentException("用户名只能包含1至32位字母、数字、下划线或连字符");
 
         String realName = (String) params.get("realName");
         String studentId = (String) params.get("studentId");
@@ -113,23 +133,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         // 2. 查找预存记录
         User user = this.getOne(new LambdaQueryWrapper<User>().eq(User::getEmail, email));
         if (user == null) {
-            throw new RuntimeException("请先获取验证码");
+            throw new IllegalArgumentException("请先获取验证码");
         }
 
-        // 3. 校验验证码与有效期
-        if (user.getEmailCode() == null || !user.getEmailCode().equals(code)) {
-            throw new RuntimeException("验证码错误");
-        }
-        if (user.getCodeExpireTime() != null && LocalDateTime.now().isAfter(user.getCodeExpireTime())) {
-            throw new RuntimeException("验证码已过期");
-        }
+        if (user.getPassword() != null) throw new IllegalArgumentException("该邮箱已注册，请登录或找回密码");
+        verificationCodes.consume(email, "register", code);
 
         // 4. 检查用户名是否已被他人占用
         User nameConflict = this.getOne(new LambdaQueryWrapper<User>()
                 .eq(User::getUsername, username)
                 .ne(User::getEmail, email));
         if (nameConflict != null) {
-            throw new RuntimeException("用户名已被占用");
+            throw new IllegalArgumentException("用户名已被占用");
         }
 
         // 5. & 6. 使用 UpdateWrapper 更新信息并强制清空验证码
@@ -138,6 +153,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 .set(User::getUsername, username)
                 .set(User::getPassword, passwordEncoder.encode(password))
                 .set(User::getRole, "USER")
+                .set(User::getLocked, false)
                 .set(User::getRealName, realName)
                 .set(User::getStudentId, studentId)
                 .set(User::getGender, gender)
@@ -148,14 +164,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
     @Override
     public String login(String account, String password) {
+        if (account == null || account.length() > 254 || password == null || password.length() > 72)
+            throw new IllegalArgumentException("用户名或密码错误");
         // 同时匹配 username 或 email
         User user = this.getOne(new LambdaQueryWrapper<User>()
                 .eq(User::getUsername, account)
                 .or()
                 .eq(User::getEmail, account));
 
-        if (user == null || !passwordEncoder.matches(password, user.getPassword())) {
-            throw new RuntimeException("用户名或密码错误");
+        if (user == null || user.getPassword() == null || !passwordEncoder.matches(password, user.getPassword())) {
+            throw new IllegalArgumentException("用户名或密码错误");
+        }
+        if (Boolean.TRUE.equals(user.getLocked())) {
+            throw new IllegalArgumentException("账户已禁用");
         }
 
         String token = jwtUtils.generateToken(user);
@@ -172,29 +193,24 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User user = this.getOne(new LambdaQueryWrapper<User>()
                 .eq(User::getUsername, username));
 
-        return user;
+        return user == null || Boolean.TRUE.equals(user.getLocked()) ? null : user;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void resetPassword(Map<String, Object> params) {
-        String email = (String) params.get("email");
+        String email = verificationCodes.normalizeEmail((String) params.get("email"));
         String code = (String) params.get("code");
         String newPassword = (String) params.get("password");
+        validatePassword(newPassword);
 
         // 1. 根据邮箱查用户
         User user = this.getOne(new LambdaQueryWrapper<User>().eq(User::getEmail, email));
         if (user == null || user.getPassword() == null) {
-            throw new RuntimeException("该邮箱未注册正式账号");
+            throw new IllegalArgumentException("该邮箱未注册正式账号");
         }
 
-        // 2. 校验验证码
-        if (code == null || !code.equals(user.getEmailCode())) {
-            throw new RuntimeException("验证码错误");
-        }
-        if (user.getCodeExpireTime() != null && LocalDateTime.now().isAfter(user.getCodeExpireTime())) {
-            throw new RuntimeException("验证码已过期");
-        }
+        verificationCodes.consume(email, "update", code);
 
         // 3. 使用 UpdateWrapper 更新密码并强制清空验证码
         this.update(new LambdaUpdateWrapper<User>()
@@ -208,26 +224,28 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void sendCode(String email, String type) {
+        if (!mailEnabled) throw new IllegalArgumentException("邮件服务暂未开启，请联系管理员");
+        email = verificationCodes.normalizeEmail(email);
         User existingUser = this.getOne(new LambdaQueryWrapper<User>().eq(User::getEmail, email));
 
         if ("register".equals(type)) {
             if (existingUser != null && existingUser.getPassword() != null) {
-                throw new RuntimeException("该邮箱已被注册，请直接登录");
+                throw new IllegalArgumentException("该邮箱已被注册，请直接登录");
             }
         }
 
-        String code = String.valueOf((int) ((Math.random() * 9 + 1) * 100000));
+        String code = verificationCodes.issue(email, type);
 
         if (existingUser == null) {
             User newUser = new User();
             newUser.setEmail(email);
             newUser.setUsername("tmp_" + System.currentTimeMillis());
-            newUser.setEmailCode(code);
+            newUser.setEmailCode(null);
             newUser.setCodeExpireTime(LocalDateTime.now().plusMinutes(5));
             newUser.setRole("USER");
             this.save(newUser);
         } else {
-            existingUser.setEmailCode(code);
+            existingUser.setEmailCode(null);
             existingUser.setCodeExpireTime(LocalDateTime.now().plusMinutes(5));
             this.updateById(existingUser);
         }
@@ -258,7 +276,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     public void clearTemporaryUsers() {
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
-        wrapper.likeRight(User::getUsername, "tmp_")
+        wrapper.isNull(User::getPassword)
+                .likeRight(User::getUsername, "tmp_")
                 .lt(User::getCodeExpireTime, LocalDateTime.now()); // 只删过期时间早于现在的
 
         userMapper.delete(wrapper);

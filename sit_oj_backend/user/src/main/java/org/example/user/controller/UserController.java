@@ -32,7 +32,7 @@ public class UserController {
         try {
             userService.register(params);
             return Result.success(null);
-        } catch (RuntimeException e) {
+        } catch (IllegalArgumentException e) {
             // 返回具体的业务错误原因（如：验证码过期、用户名占用等）
             return Result.error(e.getMessage());
         } catch (Exception e) {
@@ -51,8 +51,10 @@ public class UserController {
             String password = loginRequest.get("password");
             String token = userService.login(username, password);
             return Result.success(token);
+        } catch (IllegalArgumentException e) {
+            return Result.error(e.getMessage());
         } catch (Exception e) {
-            return Result.error("用户名或密码不存在！");
+            return Result.error("登录失败，请稍后重试");
         }
     }
 
@@ -72,7 +74,7 @@ public class UserController {
         try {
 
             User user = userService.tokenToUser(token);
-            if (user == null) {
+            if (user == null || Boolean.TRUE.equals(user.getLocked())) {
                 return Result.error("用户不存在");
             }
             user.setPassword(null);
@@ -146,7 +148,7 @@ public class UserController {
             userService.updateUserInfo(user, code);
 
             return Result.success(); // 修改成功
-        } catch (RuntimeException e) {
+        } catch (IllegalArgumentException e) {
             // 捕获业务异常（如：验证码错误、邮箱已占用等）
             return Result.error(e.getMessage());
         } catch (Exception e) {
@@ -156,14 +158,20 @@ public class UserController {
 
     @PostMapping("/sendCode")
     public Result<Void> sendCode(@RequestParam String email, @RequestParam(defaultValue = "register") String type) {
-        userService.sendCode(email, type);
-        return Result.success();
+        try {
+            userService.sendCode(email, type);
+            return Result.success();
+        } catch (IllegalArgumentException e) { return Result.error(e.getMessage()); }
+        catch (Exception e) { return Result.error("验证码服务暂时不可用"); }
     }
 
     @PostMapping("/resetPassword")
     public Result<Void> resetPassword(@RequestBody Map<String, Object> params) {
-        userService.resetPassword(params);
-        return Result.success();
+        try {
+            userService.resetPassword(params);
+            return Result.success();
+        } catch (IllegalArgumentException e) { return Result.error(e.getMessage()); }
+        catch (Exception e) { return Result.error("密码重置失败，请稍后重试"); }
     }
 
 }

@@ -12,10 +12,15 @@ services:
       - JVM_XMS=256m
       - JVM_XMX=512m
       - JVM_XMN=128m
-      - NACOS_AUTH_ENABLE=false
+      - NACOS_AUTH_ENABLE=true
+      - NACOS_AUTH_TOKEN=${NACOS_AUTH_TOKEN:?Set NACOS_AUTH_TOKEN}
+      - NACOS_AUTH_IDENTITY_KEY=X-OJ-Nacos-Identity
+      - NACOS_AUTH_IDENTITY_VALUE=${NACOS_AUTH_IDENTITY_VALUE:?Set NACOS_AUTH_IDENTITY_VALUE}
+    volumes:
+      - ./data/nacos:/home/nacos/data
     ports:
-      - "8848:8848"
-      - "9848:9848"
+      - "127.0.0.1:8848:8848"
+      - "127.0.0.1:9848:9848"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/index.html"]
       interval: 10s
@@ -36,14 +41,17 @@ services:
       - oj-net
     restart: always
     environment:
-      - MYSQL_ROOT_PASSWORD=13575877459hhh
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=sit_oj
+      - MYSQL_USER=${DB_USERNAME:-oj_app}
+      - MYSQL_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD}
     volumes:
       - ./data/mysql:/var/lib/mysql
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
-      - "3307:3306"
+      - "127.0.0.1:3307:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p13575877459hhh"]
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h localhost -u root --silent"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -63,11 +71,13 @@ services:
     container_name: oj-redis
     networks:
       - oj-net
-    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy noeviction --requirepass \"$$REDIS_PASSWORD\""]
     volumes:
       - ./data/redis:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -82,13 +92,14 @@ services:
   oj-rabbitmq:
     image: rabbitmq:3.12-management-alpine
     container_name: oj-rabbitmq
+    hostname: ${RABBITMQ_HOSTNAME:-oj-rabbitmq}
     networks:
       - oj-net
     environment:
       - RABBITMQ_DEFAULT_USER=oj_admin
-      - RABBITMQ_DEFAULT_PASS=oj_rabbit_2026
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
     ports:
-      - "15672:15672"  # Web管理台
+      - "127.0.0.1:15672:15672"  # Web管理台
     volumes:
       - ./data/rabbitmq:/var/lib/rabbitmq
     healthcheck:
@@ -118,8 +129,8 @@ services:
       - ./data/judge_server/run:/judger
     environment:
       - SERVICE_URL=http://oj-judge-server:8080
-      - BACKEND_URL=http://oj-gateway:8001/admin/judge/judge_server_heartbeat
-      - TOKEN=SIT_OJ_JUDGE_TOKEN_2026
+      - BACKEND_URL=http://oj-judge-logic:8083/admin/judge/judge_server_heartbeat
+      - TOKEN=${JUDGE_TOKEN:?Set JUDGE_TOKEN}
     deploy:
       resources:
         limits:
@@ -131,17 +142,24 @@ services:
   oj-gateway:
     build: ./sit_oj_backend/gateway
     container_name: oj-gateway
+    volumes:
+      - ./data/logs/gateway:/var/log/oj
+      - ./ops/logback-spring.xml:/etc/oj/logback-spring.xml:ro
     networks:
       - oj-net
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     depends_on:
       oj-nacos:
         condition: service_healthy
     environment:
+      - LOGGING_CONFIG=/etc/oj/logback-spring.xml
       - JAVA_OPTS=-Xms128m -Xmx256m -XX:MaxDirectMemorySize=64m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
-      - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
+      - SPRING_CLOUD_NACOS_DISCOVERY_USERNAME=nacos
+      - SPRING_CLOUD_NACOS_DISCOVERY_PASSWORD=${NACOS_PASSWORD:?Set NACOS_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:?Set INTERNAL_API_KEY}
     restart: always
     deploy:
       resources:
@@ -152,6 +170,9 @@ services:
   oj-user:
     build: ./sit_oj_backend/user
     container_name: oj-user
+    volumes:
+      - ./data/logs/user:/var/log/oj
+      - ./ops/logback-spring.xml:/etc/oj/logback-spring.xml:ro
     networks:
       - oj-net
     depends_on:
@@ -160,11 +181,23 @@ services:
       oj-nacos:
         condition: service_healthy
     environment:
+      - LOGGING_CONFIG=/etc/oj/logback-spring.xml
       - JAVA_OPTS=-Xms256m -Xmx384m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
+      - SPRING_CLOUD_NACOS_DISCOVERY_USERNAME=nacos
+      - SPRING_CLOUD_NACOS_DISCOVERY_PASSWORD=${NACOS_PASSWORD:?Set NACOS_PASSWORD}
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-      - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
+      - SPRING_DATASOURCE_USERNAME=${DB_USERNAME:-oj_app}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:?Set INTERNAL_API_KEY}
       - JWT_EXPIRATION=86400000
+      - MAIL_ENABLED=${MAIL_ENABLED:-false}
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      - SPRING_DATA_REDIS_HOST=oj-redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?Set REDIS_PASSWORD}
     restart: always
     deploy:
       resources:
@@ -184,11 +217,19 @@ services:
         condition: service_healthy
     volumes:
       - ./data/test_case:/data/test_case
+      - ./data/logs/problem:/var/log/oj
+      - ./ops/logback-spring.xml:/etc/oj/logback-spring.xml:ro
     environment:
+      - LOGGING_CONFIG=/etc/oj/logback-spring.xml
       - JAVA_OPTS=-Xms256m -Xmx384m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
+      - SPRING_CLOUD_NACOS_DISCOVERY_USERNAME=nacos
+      - SPRING_CLOUD_NACOS_DISCOVERY_PASSWORD=${NACOS_PASSWORD:?Set NACOS_PASSWORD}
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-      - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
+      - SPRING_DATASOURCE_USERNAME=${DB_USERNAME:-oj_app}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:?Set INTERNAL_API_KEY}
       - OJ_TESTCASE_ENABLE_REMOTE_SYNC=false
     restart: always
     deploy:
@@ -200,6 +241,9 @@ services:
   oj-submission:
     build: ./sit_oj_backend/submission
     container_name: oj-submission
+    volumes:
+      - ./data/logs/submission:/var/log/oj
+      - ./ops/logback-spring.xml:/etc/oj/logback-spring.xml:ro
     networks:
       - oj-net
     depends_on:
@@ -212,16 +256,23 @@ services:
       oj-redis:
         condition: service_healthy
     environment:
+      - LOGGING_CONFIG=/etc/oj/logback-spring.xml
       - JAVA_OPTS=-Xms192m -Xmx256m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
+      - SPRING_CLOUD_NACOS_DISCOVERY_USERNAME=nacos
+      - SPRING_CLOUD_NACOS_DISCOVERY_PASSWORD=${NACOS_PASSWORD:?Set NACOS_PASSWORD}
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-      - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
+      - SPRING_DATASOURCE_USERNAME=${DB_USERNAME:-oj_app}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:?Set INTERNAL_API_KEY}
       - SPRING_RABBITMQ_HOST=oj-rabbitmq
       - SPRING_RABBITMQ_PORT=5672
       - SPRING_RABBITMQ_USERNAME=oj_admin
-      - SPRING_RABBITMQ_PASSWORD=oj_rabbit_2026
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
       - SPRING_DATA_REDIS_HOST=oj-redis
       - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?Set REDIS_PASSWORD}
     restart: always
     deploy:
       resources:
@@ -232,6 +283,9 @@ services:
   oj-competition:
     build: ./sit_oj_backend/competition
     container_name: oj-competition
+    volumes:
+      - ./data/logs/competition:/var/log/oj
+      - ./ops/logback-spring.xml:/etc/oj/logback-spring.xml:ro
     networks:
       - oj-net
     depends_on:
@@ -242,12 +296,19 @@ services:
       oj-redis:
         condition: service_healthy
     environment:
+      - LOGGING_CONFIG=/etc/oj/logback-spring.xml
       - JAVA_OPTS=-Xms192m -Xmx256m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
+      - SPRING_CLOUD_NACOS_DISCOVERY_USERNAME=nacos
+      - SPRING_CLOUD_NACOS_DISCOVERY_PASSWORD=${NACOS_PASSWORD:?Set NACOS_PASSWORD}
       - SPRING_DATASOURCE_URL=jdbc:mysql://oj-mysql:3306/sit_oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-      - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
+      - SPRING_DATASOURCE_USERNAME=${DB_USERNAME:-oj_app}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:?Set INTERNAL_API_KEY}
       - SPRING_DATA_REDIS_HOST=oj-redis
       - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?Set REDIS_PASSWORD}
     restart: always
     deploy:
       resources:
@@ -258,6 +319,9 @@ services:
   oj-judge-logic:
     build: ./sit_oj_backend/judge
     container_name: oj-judge-logic
+    volumes:
+      - ./data/logs/judge:/var/log/oj
+      - ./ops/logback-spring.xml:/etc/oj/logback-spring.xml:ro
     networks:
       - oj-net
     depends_on:
@@ -268,16 +332,20 @@ services:
       oj-rabbitmq:
         condition: service_healthy
     environment:
+      - LOGGING_CONFIG=/etc/oj/logback-spring.xml
       - JAVA_OPTS=-Xms128m -Xmx256m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError
       - SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR=oj-nacos:8848
+      - SPRING_CLOUD_NACOS_DISCOVERY_USERNAME=nacos
+      - SPRING_CLOUD_NACOS_DISCOVERY_PASSWORD=${NACOS_PASSWORD:?Set NACOS_PASSWORD}
       - OJ_JUDGE_SERVER_URL=http://oj-judge-server:8080
-      - OJ_JUDGE_TOKEN=SIT_OJ_JUDGE_TOKEN_2026
-      - JWT_SECRET=SIT_ALGORITHM_COMMUNITY_SECRET_KEY_2026_SECURE_VERSION
+      - OJ_JUDGE_TOKEN=${JUDGE_TOKEN:?Set JUDGE_TOKEN}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:?Set INTERNAL_API_KEY}
       - JWT_EXPIRATION=86400000
       - SPRING_RABBITMQ_HOST=oj-rabbitmq
       - SPRING_RABBITMQ_PORT=5672
       - SPRING_RABBITMQ_USERNAME=oj_admin
-      - SPRING_RABBITMQ_PASSWORD=oj_rabbit_2026
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
     restart: always
     deploy:
       resources:
@@ -296,6 +364,8 @@ services:
     volumes:
       - ./sit_oj_backend/frontend/dist:/usr/share/nginx/html:ro
       - ./sit_oj_backend/frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./sit_oj_backend/frontend/oj-proxy.conf:/etc/nginx/oj-proxy.conf:ro
+      - ./data/logs/nginx:/var/log/oj
     depends_on:
       - oj-gateway
     restart: always

@@ -1,0 +1,19 @@
+# Replace /ABSOLUTE/OJ/ROOT with the project's actual absolute path on the server.
+# Install as /etc/logrotate.d/sit-oj; Java logs already rotate via Logback.
+"/ABSOLUTE/OJ/ROOT/data/logs/nginx/access.ndjson" "/ABSOLUTE/OJ/ROOT/data/logs/nginx/error.log" {
+    daily
+    maxsize 100M
+    rotate 90
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 0640 root root
+    su root root
+    sharedscripts
+    postrotate
+        if [ "$(/usr/bin/docker inspect -f '{{.State.Running}}' oj-frontend 2>/dev/null)" = true ]; then
+            /usr/bin/docker kill --signal=USR1 oj-frontend >/dev/null
+        fi
+    endscript
+}

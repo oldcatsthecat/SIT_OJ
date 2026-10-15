@@ -27,7 +27,7 @@ public class LoginInterceptor implements HandlerInterceptor {
                     request.setAttribute("userRole", role); // 存入角色供 AdminInterceptor 使用
                 }
             } catch (Exception e) {
-                System.err.println("Competition模块Token解析失败: " + e.getMessage());
+                System.err.println("Token 解析失败");
             }
         }
         return true;

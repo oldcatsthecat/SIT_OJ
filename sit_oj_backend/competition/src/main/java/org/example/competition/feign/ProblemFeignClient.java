@@ -9,7 +9,7 @@ import java.util.List;
 @FeignClient(value = "problem", fallbackFactory = ProblemFeignClientFallback.class)
 public interface ProblemFeignClient {
 
-    @GetMapping("/problems/{id}")
+    @GetMapping("/problems/inner/{id}")
     Object getProblemById(@PathVariable("id") Integer id);
 
     @GetMapping("/problems/list")

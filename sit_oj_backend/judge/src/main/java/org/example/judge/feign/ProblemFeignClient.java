@@ -10,6 +10,6 @@ import java.util.Map;
 @FeignClient(value = "problem", fallbackFactory = ProblemFeignClientFallback.class)
 public interface ProblemFeignClient {
 
-    @GetMapping("/problems/{id}")
+    @GetMapping("/problems/inner/{id}")
     Map<String, Object> getProblemById(@PathVariable("id") Integer id);
 }

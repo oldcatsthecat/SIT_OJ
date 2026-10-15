@@ -18,7 +18,8 @@ public class AdminInterceptor implements HandlerInterceptor {
         // 从 Request 属性中获取 LoginInterceptor 解析出的角色
 
         String token = request.getHeader("Authorization");
-        String role = jwtUtils.getRoleFromToken(token); // 解析 Token
+        String role = null;
+        try { role = jwtUtils.getRoleFromToken(token); } catch (Exception ignored) { }
 
         if ("ADMIN".equalsIgnoreCase(role)) {
             return true;
