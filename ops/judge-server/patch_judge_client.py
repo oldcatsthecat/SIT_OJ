@@ -9,7 +9,9 @@ PATCH_MARKER = "SIT_OJ_EARLY_TLE_PATCH"
 RUN_METHOD = """    def run(self):
         # SIT_OJ_EARLY_TLE_PATCH: consume results before all cases finish.
         result = []
-        pool = Pool(processes=1)
+        # Gunicorn handles requests in threads; forking from a worker thread can
+        # leave inherited locks held forever in the child process.
+        pool = get_context("spawn").Pool(processes=1)
         try:
             tasks = ((self, case_id) for case_id in self._test_case_info["test_cases"])
             for item in pool.imap(_sit_oj_run_task, tasks, chunksize=1):
@@ -50,6 +52,10 @@ def patch_source(source):
         raise ValueError("JudgeClient.run differs from the expected 1.6.1 implementation")
     lines[run_method.lineno - 1:run_method.end_lineno] = [RUN_METHOD]
     patched = "".join(lines).rstrip() + "\n\n"
+    if "from multiprocessing import Pool\n" not in patched:
+        raise ValueError("JudgeClient multiprocessing import differs from the expected 1.6.1 implementation")
+    patched = patched.replace("from multiprocessing import Pool\n",
+                              "from multiprocessing import get_context\n", 1)
     patched += "def _sit_oj_run_task(task):\n    return _run(*task)\n"
     ast.parse(patched)
     return patched

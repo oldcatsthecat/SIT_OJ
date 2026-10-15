@@ -59,3 +59,11 @@ ssh -i "$ojKey" -p $ojPort $ojDestination 'cd /home/ubuntu/sit_oj/SIT_OJ && pwd'
 GitHub PR #4 的代码已部署到服务器。迁移前 `judge_outbox` 不存在，786 条提交中待判题记录为 0。执行 `database/migrations/20261015_add_judge_outbox.sql` 前的完整数据库备份保存在 `incident-backups/sit_oj-before-judge-outbox-20261015-194001.sql`（3,212,048 字节）；更新前代码备份保存在 `incident-backups/code-before-judge-reliability-20261015-194413.tar.gz`。迁移后 outbox 行数、未发布行数和待判题提交数均为 0。
 
 已更新前端挂载文件，重建并重启 `oj-user`、`oj-problem`、`oj-submission`、`oj-competition`、`oj-judge-logic` 和 `oj-judge-server`，同时重启网关与前端。服务器 Docker Hub 代理返回 502，Java 服务使用原有应用镜像作为本地基础镜像，替换本机 Maven 构建并通过测试的 JAR；旧镜像保留了 `pre-20261015-judge-reliability` 标签。上线后五个 Java 容器中的 `/app.jar` 与宿主机 `target/*-exec.jar` 哈希一致，判题服务器健康检查通过，Nginx 配置检查通过，首页和题目列表接口返回 200；12 个容器均运行。RabbitMQ 的新 `judge.request.queue.v2` 队列为空，既有死信队列保留 80 条消息，未在本次部署中清理。
+
+## 2026-10-15 Pending 提交修复
+
+提交 1014–1017 的请求已经发布到 `judge.request.queue.v2`，但判题逻辑的两个消费者卡在读取判题机 `/judge` 响应，RabbitMQ 30 分钟确认超时后消费者数降为 0。判题机使用多线程 Gunicorn，而原补丁通过默认 `fork` 创建判题子进程；此次将子进程池改为 `spawn`，并为 Java 到判题机的 HTTP 请求设置 5 秒连接超时、10 分钟读取超时。
+
+修复前代码备份为 `incident-backups/code-before-pending-fix-20261015-221655.tar.gz`。旧镜像分别保留为 `sit_oj-judge-server:pre-pending-fix-20261015` 与 `sit_oj-oj-judge-logic:pre-pending-fix-20261015`。更新了判题机与判题逻辑镜像并重启这两个容器；判题机子进程烟测通过，运行中的判题逻辑 `/app.jar` 与本地构建产物 SHA-256 一致。
+
+重启交接期间 1014、1015 曾因连接中断被写为 `SE`，随后仅将这两条连接错误恢复为 `Pending` 并重置对应 outbox 发布标记重新判题。复核结果：1014–1016 为 `TLE`，1017 为 `AC`；后续新提交 1018 为 `WA`。当前待判题提交数与 v2 队列待消费数均为 0，v2 队列消费者数为 2。旧死信队列 80 条未处理。

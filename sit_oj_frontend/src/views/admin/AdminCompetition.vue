@@ -135,10 +135,19 @@
       </div>
       <div class="export-toolbar">
         <el-input v-model="exportSearch" placeholder="搜索用户 ID、用户名或姓名" clearable :disabled="exporting" />
+        <el-button :disabled="exporting || loadingExportParticipants || !!exportLoadError || !exportParticipants.length" @click="toggleAllExportParticipants">
+          {{ selectedExportCount === exportParticipants.length ? '取消全选' : '全选' }}
+        </el-button>
+        <span>已选 {{ selectedExportCount }} 人</span>
         <span>participants {{ participantCount }} 人 / stars {{ starCount }} 人</span>
       </div>
       <el-alert v-if="exportLoadError" :title="exportLoadError" type="error" :closable="false" />
       <el-table :data="filteredExportParticipants" row-key="userId" v-loading="loadingExportParticipants" border max-height="400">
+        <el-table-column label="导出" width="65" align="center">
+          <template #default="{ row }">
+            <el-checkbox v-model="row.selected" :disabled="exporting" :aria-label="`导出选手 ${row.username || row.userId}`" />
+          </template>
+        </el-table-column>
         <el-table-column prop="userId" label="用户 ID" width="90" />
         <el-table-column prop="username" label="用户名" min-width="130" />
         <el-table-column prop="realName" label="姓名" min-width="120" />
@@ -153,7 +162,7 @@
       </el-table>
       <template #footer>
         <el-button :disabled="exporting" @click="exportDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="exporting" :disabled="loadingExportParticipants || !!exportLoadError" @click="handleExport">
+        <el-button type="primary" :loading="exporting" :disabled="loadingExportParticipants || !!exportLoadError || !selectedExportCount" @click="handleExport">
           确认导出
         </el-button>
       </template>
@@ -198,13 +207,19 @@ const exportLoadError = ref('');
 const exporting = ref(false);
 const exportSearch = ref('');
 let exportLoadVersion = 0;
-const starCount = computed(() => exportParticipants.value.filter(user => user.group === 'stars').length);
-const participantCount = computed(() => exportParticipants.value.length - starCount.value);
+const selectedExportParticipants = computed(() => exportParticipants.value.filter(user => user.selected));
+const selectedExportCount = computed(() => selectedExportParticipants.value.length);
+const starCount = computed(() => selectedExportParticipants.value.filter(user => user.group === 'stars').length);
+const participantCount = computed(() => selectedExportCount.value - starCount.value);
 const filteredExportParticipants = computed(() => {
   const search = exportSearch.value.trim().toLowerCase();
   return exportParticipants.value.filter(user => [user.userId, user.username, user.realName]
       .some(value => String(value ?? '').toLowerCase().includes(search)));
 });
+const toggleAllExportParticipants = () => {
+  const selected = selectedExportCount.value !== exportParticipants.value.length;
+  exportParticipants.value.forEach(user => { user.selected = selected; });
+};
 
 // 1. 获取比赛列表
 const loadCompetitions = async () => {
@@ -360,7 +375,7 @@ const openExportDialog = async (row) => {
     if (res.code !== 200 || !Array.isArray(res.data)) {
       throw new Error(res.message || '加载导出名单失败，请关闭窗口后重试');
     }
-    exportParticipants.value = res.data.map(user => ({ ...user, group: 'participants' }));
+    exportParticipants.value = res.data.map(user => ({ ...user, group: 'participants', selected: true }));
   } catch (e) {
     if (version === exportLoadVersion) {
       exportLoadError.value = e.message || '加载导出名单失败，请关闭窗口后重试';
@@ -371,12 +386,13 @@ const openExportDialog = async (row) => {
 };
 
 const handleExport = async () => {
-  if (!exportCompetition.value || loadingExportParticipants.value || exportLoadError.value || exporting.value) return;
+  if (!exportCompetition.value || loadingExportParticipants.value || exportLoadError.value || exporting.value || !selectedExportCount.value) return;
   const competitionId = exportCompetition.value.competitionId;
-  const userGroups = Object.fromEntries(exportParticipants.value.map(user => [user.userId, user.group]));
+  const selectedUserIds = selectedExportParticipants.value.map(user => user.userId);
+  const userGroups = Object.fromEntries(selectedExportParticipants.value.map(user => [user.userId, user.group]));
   exporting.value = true;
   try {
-    const res = await adminCompetitionApi.exportResolver(competitionId, userGroups);
+    const res = await adminCompetitionApi.exportResolver(competitionId, userGroups, selectedUserIds);
     if (res.code === 200 && res.data) {
       const blob = new Blob([res.data], { type: 'application/x-ndjson' });
       const url = URL.createObjectURL(blob);
