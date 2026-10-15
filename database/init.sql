@@ -75,6 +75,14 @@ CREATE TABLE IF NOT EXISTS submissions (
     CONSTRAINT fk_sub_problem FOREIGN KEY (problem_id) REFERENCES problems(problem_id) ON DELETE CASCADE,
     CONSTRAINT fk_sub_contest FOREIGN KEY (competition_id) REFERENCES competitions(competition_id) ON DELETE CASCADE
     ) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS judge_outbox (
+    submission_id INT PRIMARY KEY,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    published_at DATETIME NULL,
+    INDEX idx_judge_outbox_pending (published_at, submission_id),
+    CONSTRAINT fk_judge_outbox_submission FOREIGN KEY (submission_id)
+        REFERENCES submissions(submission_id) ON DELETE CASCADE
+) ENGINE=InnoDB;
 -- 5. 比赛题目关联表
 CREATE TABLE IF NOT EXISTS competition_problems (
                                                     competition_id INT NOT NULL,

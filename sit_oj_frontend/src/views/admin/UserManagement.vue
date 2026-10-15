@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span class="title">用户管理系统</span>
-          <el-button type="primary" @click="fetchUsers">刷新数据</el-button>
+          <el-button type="primary" @click="() => fetchUsers(currentPage)">刷新数据</el-button>
         </div>
       </template>
 
@@ -79,7 +79,7 @@
           <el-input v-model="editForm.username" disabled />
         </el-form-item>
         <el-form-item label="真实姓名">
-          <el-input v-model="editForm.realName" />
+          <el-input v-model="editForm.realName" placeholder="最多50个字符" />
         </el-form-item>
         <el-form-item label="学号">
           <el-input v-model="editForm.studentId" />
@@ -109,6 +109,7 @@
 import { ref, onMounted, reactive } from 'vue';
 import { ElMessage } from 'element-plus';
 import { adminUserApi } from '@/api';
+import { isValidRealName } from '@/utils/realName';
 
 const users = ref([]);
 const loading = ref(false);
@@ -154,6 +155,10 @@ const openEditDialog = (row) => {
 };
 
 const submitUpdate = async () => {
+  if (editForm.realName != null && !isValidRealName(editForm.realName)) {
+    ElMessage.warning('姓名不能为空且不能超过50个字符');
+    return;
+  }
   submitting.value = true;
   try {
     const res = await adminUserApi.update(editForm);

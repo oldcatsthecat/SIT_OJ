@@ -18,7 +18,7 @@
         <el-descriptions-item label="用户名">{{ userInfo.username }}</el-descriptions-item>
 
         <el-descriptions-item label="真实姓名">
-          <el-input v-if="isEditing" v-model="editForm.realName" placeholder="请输入姓名" maxlength="50" />
+          <el-input v-if="isEditing" v-model="editForm.realName" placeholder="请输入姓名" />
           <span v-else>{{ userInfo.realName || '未填写' }}</span>
         </el-descriptions-item>
 
@@ -114,6 +114,7 @@ import { ref, onMounted } from 'vue'
 import { userApi } from '@/api/index.js'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
+import { isValidRealName } from '@/utils/realName'
 
 const router = useRouter()
 const loading = ref(false)         // 页面初始加载状态
@@ -154,9 +155,8 @@ const toggleEdit = () => {
 
 // 资料保存（同步数据库操作）
 const handleSave = async () => {
-  // 校验：与注册页保持一致
-  if (!editForm.value.realName || !/^[一-龥]{2,50}$/.test(editForm.value.realName)) {
-    return ElMessage.warning('姓名需为2~50位中文')
+  if (!isValidRealName(editForm.value.realName)) {
+    return ElMessage.warning('姓名不能为空且不能超过50个字符')
   }
   if (!editForm.value.studentId || !editForm.value.studentId.toString().trim()) {
     return ElMessage.warning('学号不能为空')

@@ -12,6 +12,7 @@ import org.example.user.entity.User;
 import org.example.user.mapper.UserMapper;
 import org.example.user.service.UserService;
 import org.example.user.utils.JwtUtils;
+import org.example.user.utils.RealNameValidator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -78,7 +79,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
 
         // 4. 情况 C：处理普通信息更新（无论有无验证码，这些字段都可以直接改）
-        if (user.getRealName() != null) currentUser.setRealName(user.getRealName());
+        if (user.getRealName() != null) {
+            if (!RealNameValidator.isValid(user.getRealName()))
+                throw new IllegalArgumentException("姓名不能为空且不能超过50个字符");
+            currentUser.setRealName(user.getRealName());
+        }
         if (user.getStudentId() != null) currentUser.setStudentId(user.getStudentId());
         if (user.getGender() != null) currentUser.setGender(user.getGender());
         if (user.getAge() != null) currentUser.setAge(user.getAge());
@@ -126,6 +131,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (username == null || !username.matches("[A-Za-z0-9_\\-]{1,32}")) throw new IllegalArgumentException("用户名只能包含1至32位字母、数字、下划线或连字符");
 
         String realName = (String) params.get("realName");
+        if (!RealNameValidator.isValid(realName))
+            throw new IllegalArgumentException("姓名不能为空且不能超过50个字符");
         String studentId = (String) params.get("studentId");
         String gender = (String) params.get("gender");
         Integer age = (Integer) params.get("age"); // 注意前端传的是数字

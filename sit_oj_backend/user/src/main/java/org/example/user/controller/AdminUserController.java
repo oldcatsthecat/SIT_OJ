@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import org.example.common.utils.Result;
 import org.example.user.entity.User;
 import org.example.user.service.UserService;
+import org.example.user.utils.RealNameValidator;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -63,6 +64,8 @@ public class AdminUserController {
     public Result<Void> updateUser(@RequestBody User user, @RequestHeader("Authorization") String token) {
         if (user.getId() == null || userService.getById(user.getId()) == null) return Result.error("用户不存在");
         if (user.getRole() != null && !java.util.Set.of("USER", "ADMIN").contains(user.getRole())) return Result.error("角色无效");
+        if (user.getRealName() != null && !RealNameValidator.isValid(user.getRealName()))
+            return Result.error("姓名不能为空且不能超过50个字符");
         User update = new User();
         update.setId(user.getId());
         update.setRole(user.getRole());
