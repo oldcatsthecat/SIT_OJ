@@ -7,6 +7,7 @@ import { join } from 'node:path';
 const origin = process.env.OJ_ORIGIN || 'http://106.54.237.248';
 const waitMs = Number(process.env.OJ_WAIT_MS || 5000);
 const checkEditor = process.env.OJ_CHECK_EDITOR === '1';
+const checkFallback = process.env.OJ_CHECK_FALLBACK === '1';
 const browser = process.env.OJ_BROWSER || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const profile = await mkdtemp(join(tmpdir(), 'oj-click-'));
 const child = spawn(browser, ['--headless=new', '--no-first-run', '--disable-gpu', '--remote-debugging-port=0', `--user-data-dir=${profile}`, `${origin}/problems`], { stdio: 'ignore' });
@@ -28,8 +29,10 @@ try {
   const assets = [];
   const responses = [];
   const errors = [];
+  let pausedEditorRequestId;
   ws.addEventListener('message', ({ data }) => {
     const message = JSON.parse(data);
+    if (message.method === 'Fetch.requestPaused' && message.params.request.url.includes('/editor.main-')) pausedEditorRequestId = message.params.requestId;
     if (message.method === 'Network.requestWillBeSent' && message.params.request.url.includes('/api/prob')) requests.push(message.params.request.url);
     if (message.method === 'Network.requestWillBeSent' && message.params.request.url.includes('/assets/')) assets.push(message.params.request.url);
     if (message.method === 'Network.responseReceived' && message.params.response.url.includes('/assets/')) responses.push({ url: message.params.response.url, status: message.params.response.status });
@@ -41,6 +44,7 @@ try {
   const evaluate = async expression => (await send('Runtime.evaluate', { expression, returnByValue: true })).result.result.value;
   await send('Network.enable');
   await send('Runtime.enable');
+  if (checkFallback) await send('Fetch.enable', { patterns: [{ urlPattern: '*editor.main-*.js', requestStage: 'Request' }] });
   let link;
   for (let i = 0; i < 100; i++) {
     link = await evaluate('document.querySelector(".problem-name-link")?.textContent?.trim()');
@@ -56,6 +60,23 @@ try {
   console.log(JSON.stringify({ link, path, detailRequests: requests.filter(url => /\/api\/problems\/\d+/.test(url)).length, assets: assets.slice(-8), responses: responses.slice(-8), errors }));
   assert.match(path, /^\/problem\/\d+$/, 'Click did not navigate to the detail route');
   assert.ok(requests.some(url => /\/api\/problems\/\d+/.test(url)), 'Click did not send a problem detail request');
+  if (checkFallback) {
+    for (let i = 0; i < 100 && !pausedEditorRequestId; i++) await new Promise(resolve => setTimeout(resolve, 100));
+    assert.ok(pausedEditorRequestId, 'Advanced editor resource was not requested');
+    const loadingShown = await evaluate('!!document.querySelector(".editor-loading .is-loading")');
+    assert.ok(loadingShown, 'Loading indicator was not shown while the editor resource was pending');
+    await send('Fetch.failRequest', { requestId: pausedEditorRequestId, errorReason: 'Failed' });
+    let simpleReady = false;
+    for (let i = 0; i < 150; i++) {
+      simpleReady = await evaluate('!!document.querySelector("textarea.simple-editor")');
+      if (simpleReady) break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    const canSubmit = await evaluate('!document.querySelector(".editor-header button.el-button--primary")?.disabled');
+    console.log(JSON.stringify({ loadingShown, simpleReady, canSubmit }));
+    assert.ok(simpleReady, 'Failed Monaco load did not show the simple editor');
+    assert.ok(canSubmit, 'Simple editor cannot submit');
+  }
   if (checkEditor) {
     let ready = false;
     for (let i = 0; i < 300; i++) {
@@ -63,7 +84,7 @@ try {
       if (ready) break;
       await new Promise(resolve => setTimeout(resolve, 100));
     }
-    console.log(JSON.stringify({ editorReady: ready }));
+    console.log(JSON.stringify({ editorReady: ready, simpleReady: await evaluate('!!document.querySelector("textarea.simple-editor")'), errors }));
     assert.ok(ready, 'Code editor did not initialize');
   }
   ws.close();
