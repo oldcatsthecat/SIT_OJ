@@ -67,3 +67,7 @@ GitHub PR #4 的代码已部署到服务器。迁移前 `judge_outbox` 不存在
 修复前代码备份为 `incident-backups/code-before-pending-fix-20261015-221655.tar.gz`。旧镜像分别保留为 `sit_oj-judge-server:pre-pending-fix-20261015` 与 `sit_oj-oj-judge-logic:pre-pending-fix-20261015`。更新了判题机与判题逻辑镜像并重启这两个容器；判题机子进程烟测通过，运行中的判题逻辑 `/app.jar` 与本地构建产物 SHA-256 一致。
 
 重启交接期间 1014、1015 曾因连接中断被写为 `SE`，随后仅将这两条连接错误恢复为 `Pending` 并重置对应 outbox 发布标记重新判题。复核结果：1014–1016 为 `TLE`，1017 为 `AC`；后续新提交 1018 为 `WA`。当前待判题提交数与 v2 队列待消费数均为 0，v2 队列消费者数为 2。旧死信队列 80 条未处理。
+
+## 2026-10-16 题目点击延迟修复
+
+仅更新了前端只读挂载目录 `sit_oj_backend/frontend/dist`，没有重建或重启后端容器。发布前的前端文件备份为 `incident-backups/frontend-before-click-fix-20261016.tar.gz`。详情路由把 Monaco 编辑器拆为异步资源后，冷启动浏览器点击第一道题，在 5 秒检查窗口内进入 `/problem/1` 并发出详情接口请求；编辑器随后完成初始化。Nginx 配置检查通过。旧哈希资源暂留服务器，以免已打开旧版页面的客户端在切换期间加载失败。
