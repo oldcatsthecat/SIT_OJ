@@ -1,0 +1,73 @@
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const origin = process.env.OJ_ORIGIN || 'http://106.54.237.248';
+const waitMs = Number(process.env.OJ_WAIT_MS || 5000);
+const checkEditor = process.env.OJ_CHECK_EDITOR === '1';
+const browser = process.env.OJ_BROWSER || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const profile = await mkdtemp(join(tmpdir(), 'oj-click-'));
+const child = spawn(browser, ['--headless=new', '--no-first-run', '--disable-gpu', '--remote-debugging-port=0', `--user-data-dir=${profile}`, `${origin}/problems`], { stdio: 'ignore' });
+
+try {
+  let port;
+  for (let i = 0; i < 100; i++) {
+    try { port = Number((await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]); break; }
+    catch { await new Promise(resolve => setTimeout(resolve, 100)); }
+  }
+  assert.ok(port, 'Browser did not start');
+  const page = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(target => target.type === 'page' && target.url.startsWith(origin));
+  assert.ok(page, 'OJ page did not open');
+  const ws = new WebSocket(page.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => { ws.addEventListener('open', resolve, { once: true }); ws.addEventListener('error', reject, { once: true }); });
+  let sequence = 0;
+  const waiting = new Map();
+  const requests = [];
+  const assets = [];
+  const responses = [];
+  const errors = [];
+  ws.addEventListener('message', ({ data }) => {
+    const message = JSON.parse(data);
+    if (message.method === 'Network.requestWillBeSent' && message.params.request.url.includes('/api/prob')) requests.push(message.params.request.url);
+    if (message.method === 'Network.requestWillBeSent' && message.params.request.url.includes('/assets/')) assets.push(message.params.request.url);
+    if (message.method === 'Network.responseReceived' && message.params.response.url.includes('/assets/')) responses.push({ url: message.params.response.url, status: message.params.response.status });
+    if (message.method === 'Runtime.exceptionThrown') errors.push(message.params.exceptionDetails.text);
+    if (message.method === 'Network.loadingFailed') errors.push(message.params.errorText);
+    if (waiting.has(message.id)) { waiting.get(message.id)(message); waiting.delete(message.id); }
+  });
+  const send = (method, params = {}) => new Promise(resolve => { const id = ++sequence; waiting.set(id, resolve); ws.send(JSON.stringify({ id, method, params })); });
+  const evaluate = async expression => (await send('Runtime.evaluate', { expression, returnByValue: true })).result.result.value;
+  await send('Network.enable');
+  await send('Runtime.enable');
+  let link;
+  for (let i = 0; i < 100; i++) {
+    link = await evaluate('document.querySelector(".problem-name-link")?.textContent?.trim()');
+    if (link) break;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  if (!link) console.log(JSON.stringify({ url: await evaluate('location.href'), body: (await evaluate('document.body.innerText')).slice(0, 200), errors }));
+  assert.ok(link, 'No problem link rendered');
+  requests.length = 0;
+  await evaluate('document.querySelector(".problem-name-link").click()');
+  for (let i = 0; i < waitMs / 100 && !requests.some(url => /\/api\/problems\/\d+/.test(url)); i++) await new Promise(resolve => setTimeout(resolve, 100));
+  const path = await evaluate('location.pathname');
+  console.log(JSON.stringify({ link, path, detailRequests: requests.filter(url => /\/api\/problems\/\d+/.test(url)).length, assets: assets.slice(-8), responses: responses.slice(-8), errors }));
+  assert.match(path, /^\/problem\/\d+$/, 'Click did not navigate to the detail route');
+  assert.ok(requests.some(url => /\/api\/problems\/\d+/.test(url)), 'Click did not send a problem detail request');
+  if (checkEditor) {
+    let ready = false;
+    for (let i = 0; i < 300; i++) {
+      ready = await evaluate('!!document.querySelector("#code-editor .monaco-editor")');
+      if (ready) break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    console.log(JSON.stringify({ editorReady: ready }));
+    assert.ok(ready, 'Code editor did not initialize');
+  }
+  ws.close();
+} finally {
+  child.kill();
+  await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+}

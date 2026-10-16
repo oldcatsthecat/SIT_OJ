@@ -75,7 +75,7 @@
             </el-select>
             <el-button @click="handleViewRecords">查看记录</el-button>
           </div>
-          <el-button type="primary" :loading="submitting" @click="handleSubmit">
+          <el-button type="primary" :loading="submitting" :disabled="!editorReady" @click="handleSubmit">
             {{ cid ? '比赛提交' : '提交代码' }}
           </el-button>
         </div>
@@ -89,7 +89,6 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, computed} from 'vue';
 import {useRoute, useRouter} from 'vue-router';
-import * as monaco from 'monaco-editor';
 import {problemApi, submissionApi, competitionApi} from '@/api';
 import {ElMessage} from 'element-plus';
 import {Back} from '@element-plus/icons-vue';
@@ -137,10 +136,13 @@ const router = useRouter();
 const cid = route.query.cid;
 const pageLoading = ref(false);
 const submitting = ref(false);
+const editorReady = ref(false);
 const problem = ref({});
 const leftWidth = ref(45);
 const containerRef = ref(null);
 let editor = null;
+let monaco = null;
+let unmounted = false;
 let isDragging = false;
 
 const submitForm = ref({
@@ -228,7 +230,9 @@ const goBackToCompetition = () => {
   router.push({path: `/competition/${cid}`, query: {tab: 'problems'}});
 };
 
-const initEditor = () => {
+const initEditor = async () => {
+  monaco = await import('monaco-editor');
+  if (unmounted) return;
   const dom = document.getElementById('code-editor');
   if (!dom) return;
   editor = monaco.editor.create(dom, {
@@ -240,6 +244,7 @@ const initEditor = () => {
     fontFamily: "'Fira Code', 'Courier New', monospace",
     minimap: {enabled: false}
   });
+  editorReady.value = true;
 };
 
 const startDrag = () => {
@@ -266,12 +271,14 @@ onMounted(async () => {
     const res = await problemApi.getById(route.params.id, cid ? Number(cid) : undefined);
     problem.value = res.data || res;
     await nextTick();
-    initEditor();
+    void initEditor().catch(() => ElMessage.error('代码编辑器加载失败，请刷新页面重试'));
   } finally {
     pageLoading.value = false;
   }
 });
 onBeforeUnmount(() => {
+  unmounted = true;
+  editorReady.value = false;
   if (editor) editor.dispose();
 });
 </script>
