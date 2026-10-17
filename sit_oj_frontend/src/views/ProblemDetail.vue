@@ -67,13 +67,13 @@
       <div class="right-panel" :style="{ width: (100 - leftWidth) + '%' }">
         <div class="editor-header">
           <div class="left-tools">
-            <el-select v-model="submitForm.language" @change="handleLanguageChange" style="width: 100px; margin-right: 10px;">
+            <el-select v-model="submitForm.language" @change="handleLanguageChange" style="width: 100px;">
               <el-option label="C++" value="cpp" />
               <el-option label="C" value="c" />
               <el-option label="Java" value="java" />
               <el-option label="Python" value="python" />
             </el-select>
-            <el-radio-group v-model="editorMode" size="small" @change="handleEditorModeChange">
+            <el-radio-group v-model="editorMode" @change="handleEditorModeChange">
               <el-radio-button value="monaco" :disabled="editorStatus === 'failed'">高级编辑器</el-radio-button>
               <el-radio-button value="simple">简易版</el-radio-button>
             </el-radio-group>
@@ -454,6 +454,16 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #dcdfe6;
+}
+
+.left-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.left-tools > .el-button {
+  margin-left: 0;
 }
 
 .section-title {
