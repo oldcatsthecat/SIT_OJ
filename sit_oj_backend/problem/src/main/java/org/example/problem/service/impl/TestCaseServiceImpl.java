@@ -16,6 +16,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.TreeMap;
@@ -47,6 +48,11 @@ public class TestCaseServiceImpl implements TestCaseService {
         boolean movedOld = false;
         try {
             prepareTestCases(zipFile, staging, spj);
+            // The SPJ runs as a separate user and must be able to traverse the case directory.
+            // createTempDirectory uses private permissions on POSIX filesystems.
+            if (Files.getFileStore(staging).supportsFileAttributeView("posix")) {
+                Files.setPosixFilePermissions(staging, PosixFilePermissions.fromString("rwxr-xr-x"));
+            }
             if (Files.exists(problemPath)) {
                 Files.move(problemPath, backup);
                 movedOld = true;
