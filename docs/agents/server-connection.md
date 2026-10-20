@@ -75,3 +75,7 @@ GitHub PR #4 的代码已部署到服务器。迁移前 `judge_outbox` 不存在
 ## 2026-10-16 简易交题编辑器发布
 
 仅更新了前端挂载目录，没有改动数据库或重启服务。更新前前端备份为 `incident-backups/frontend-before-editor-fallback-20261016.tar.gz`，权限为 `600`。高级编辑器加载时右侧显示转圈；资源失败时自动切换到可交题的简易输入框；加载超过 30 秒也先显示简易版，若随后加载成功仍可切回高级版。线上浏览器检查验证了正常编辑器就绪、暂停加载时的转圈提示、阻断资源后的简易版和可用提交按钮。Nginx 配置检查通过；旧哈希资源暂留供已打开页面的客户端使用。
+
+## 2026-10-20 赛后练习权限修复
+
+仅发布比赛服务修复与 `participations.is_practice` 迁移。执行迁移前的完整数据库备份为 `incident-backups/sit_oj-before-practice-20261020-152122.sql`（3,437,855 字节，权限 `600`）；旧源码与 JAR 备份为 `incident-backups/code-before-practice-20261020-152212.tar.gz`（权限 `600`）；旧镜像保留为 `sit_oj-oj-competition:pre-practice-20261020`。迁移后 `is_practice` 为 `TINYINT(1) NOT NULL DEFAULT 0`，51 条原有参与记录均为正式参赛记录。新比赛容器内 `/app.jar` 的 SHA-256 为 `d54487176a3749f5251a6d542f2de8c944fdc0041aaf808cdb5aeeeaf04215df`，与本地构建产物一致。比赛列表、已结束比赛详情及排行榜接口均返回 HTTP/API 200；12 个容器运行，最近比赛服务日志无错误。本次未使用真实账号创建赛后练习记录；授权链路由本地比赛模块测试验证。服务器家目录中的上传包与临时脚本已清理。

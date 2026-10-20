@@ -384,10 +384,11 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         Competition comp = this.getById(competitionId);
         boolean isFrozen = comp != null && isInFreezePeriod(comp);
 
-        // 所有报名者都进入榜单，包括尚未提交的用户
+        // Official participants appear on the ranklist even without submissions.
         Long totalFromDb = participationMapper.selectCount(
                 new LambdaQueryWrapper<Participation>()
-                        .eq(Participation::getCompetitionId, competitionId));
+                        .eq(Participation::getCompetitionId, competitionId)
+                        .eq(Participation::getIsPractice, false));
 
         // Redis 只在人数与报名表一致时用于分页，否则会漏掉尚未提交的用户
         try {
@@ -405,6 +406,7 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
                 List<Participation> participations = participationMapper.selectList(
                         new LambdaQueryWrapper<Participation>()
                                 .eq(Participation::getCompetitionId, competitionId)
+                                .eq(Participation::getIsPractice, false)
                                 .in(Participation::getUserId, userIds));
                 Map<Integer, Participation> partMap = participations.stream()
                         .collect(Collectors.toMap(Participation::getUserId, p -> p));
@@ -573,6 +575,7 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
             // 重置 participations
             participationMapper.update(null, new LambdaUpdateWrapper<Participation>()
                     .eq(Participation::getCompetitionId, competitionId)
+                    .eq(Participation::getIsPractice, false)
                     .set(Participation::getSolvedCount, 0)
                     .set(Participation::getTotalPenalty, 0));
             // 重放所有提交
@@ -601,7 +604,8 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         try {
             List<Participation> all = participationMapper.selectList(
                     new LambdaQueryWrapper<Participation>()
-                            .eq(Participation::getCompetitionId, competitionId));
+                            .eq(Participation::getCompetitionId, competitionId)
+                            .eq(Participation::getIsPractice, false));
             for (Participation p : all) {
                 rankingService.updateRank(competitionId, p.getUserId(),
                         p.getSolvedCount(), p.getTotalPenalty());
@@ -625,6 +629,7 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
         List<Participation> participants = participationMapper.selectList(
                 new LambdaQueryWrapper<Participation>()
                         .eq(Participation::getCompetitionId, competitionId)
+                        .eq(Participation::getIsPractice, false)
                         .orderByAsc(Participation::getUserId));
         for (Participation participant : participants) {
             try {
@@ -652,7 +657,8 @@ public class CompetitionServiceImpl extends ServiceImpl<CompetitionMapper, Compe
 
         List<Participation> parts = participationMapper.selectList(
                 new LambdaQueryWrapper<Participation>()
-                        .eq(Participation::getCompetitionId, competitionId));
+                        .eq(Participation::getCompetitionId, competitionId)
+                        .eq(Participation::getIsPractice, false));
         Map<Integer, String> groups = userGroups == null ? Collections.emptyMap() : userGroups;
         Set<Integer> participantIds = parts.stream().map(Participation::getUserId).collect(Collectors.toSet());
         if (selectedUserIds != null) {

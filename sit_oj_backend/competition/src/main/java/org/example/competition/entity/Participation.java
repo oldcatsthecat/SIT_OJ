@@ -15,6 +15,8 @@ public class Participation {
 
     private Integer solvedCount;   // 解题数量
     private Integer totalPenalty;  // 总罚时（分钟）
+    @TableField("is_practice")
+    private Boolean isPractice;
 
 
     @TableField(exist = false)
