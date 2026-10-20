@@ -355,7 +355,8 @@ onBeforeUnmount(() => {
 
 /* 保持原有样式不变 */
 .problem-detail {
-  height: calc(100vh - 60px);
+  box-sizing: border-box;
+  height: calc(100vh - 80px);
   padding: 10px;
   background: #f5f7fa;
 }
@@ -376,6 +377,7 @@ onBeforeUnmount(() => {
 .left-panel {
   height: 100%;
   overflow: hidden;
+  contain: paint;
   display: flex;
   flex-direction: column;
 }
