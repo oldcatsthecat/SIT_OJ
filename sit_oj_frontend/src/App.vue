@@ -40,7 +40,7 @@
       </div>
     </el-header>
 
-    <el-main class="main-container">
+    <el-main class="main-container" :class="{ 'problem-detail-container': route.name === 'ProblemDetail' }">
       <router-view />
     </el-main>
   </div>
@@ -124,6 +124,9 @@ const handleCommand = (command) => {
 
 
 <style scoped>
+:global(body) {
+  margin: 0;
+}
 .app-wrapper {
   min-height: 100vh;
   background-color: #f5f7fa;
@@ -160,5 +163,10 @@ const handleCommand = (command) => {
   padding: 20px;
   width: 1200px;
   margin: 0 auto;
+}
+.main-container.problem-detail-container {
+  box-sizing: border-box;
+  width: min(1600px, calc(100% - 32px));
+  padding: 10px 0;
 }
 </style>

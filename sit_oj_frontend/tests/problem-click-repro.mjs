@@ -87,6 +87,23 @@ try {
     console.log(JSON.stringify({ editorReady: ready, simpleReady: await evaluate('!!document.querySelector("textarea.simple-editor")'), errors }));
     assert.ok(ready, 'Code editor did not initialize');
   }
+  if (process.env.OJ_CHECK_LAYOUT === '1') {
+    const layout = JSON.parse(await evaluate(`JSON.stringify({
+      viewportHeight: window.innerHeight,
+      pageHeight: document.documentElement.scrollHeight,
+      maxScrollY: (window.scrollTo(0, 100000), window.scrollY),
+      detailBottom: document.querySelector('.problem-detail')?.getBoundingClientRect().bottom,
+      leftPanelScrollY: (() => {
+        const body = document.querySelector('.left-panel .el-card__body');
+        body.scrollTop = 100;
+        return body.scrollTop;
+      })()
+    })`));
+    console.log(JSON.stringify({ layout }));
+    assert.ok(layout.detailBottom <= layout.viewportHeight + 1, 'Problem detail extends below the viewport');
+    assert.equal(layout.maxScrollY, 0, 'Problem detail causes unnecessary page scrolling');
+    assert.ok(layout.leftPanelScrollY > 0, 'Problem statement cannot scroll inside the left panel');
+  }
   ws.close();
 } finally {
   child.kill();
