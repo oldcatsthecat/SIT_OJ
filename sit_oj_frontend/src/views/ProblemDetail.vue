@@ -67,19 +67,36 @@
       <div class="right-panel" :style="{ width: (100 - leftWidth) + '%' }">
         <div class="editor-header">
           <div class="left-tools">
-            <el-select v-model="submitForm.language" @change="handleLanguageChange" style="width: 100px; margin-right: 10px;">
+            <el-select v-model="submitForm.language" @change="handleLanguageChange" style="width: 100px;">
               <el-option label="C++" value="cpp" />
               <el-option label="C" value="c" />
               <el-option label="Java" value="java" />
               <el-option label="Python" value="python" />
             </el-select>
+            <el-radio-group v-model="editorMode" @change="handleEditorModeChange">
+              <el-radio-button value="monaco" :disabled="editorStatus === 'failed'">高级编辑器</el-radio-button>
+              <el-radio-button value="simple">简易版</el-radio-button>
+            </el-radio-group>
             <el-button @click="handleViewRecords">查看记录</el-button>
           </div>
-          <el-button type="primary" :loading="submitting" :disabled="!editorReady" @click="handleSubmit">
+          <el-button type="primary" :loading="submitting" :disabled="editorMode === 'monaco' && editorStatus !== 'ready'" @click="handleSubmit">
             {{ cid ? '比赛提交' : '提交代码' }}
           </el-button>
         </div>
-        <div id="code-editor" class="monaco-box"></div>
+        <div class="editor-workspace">
+          <div v-if="editorMode === 'monaco' && ['loading', 'slow'].includes(editorStatus)" class="editor-loading" role="status">
+            <el-icon class="is-loading"><Loading /></el-icon>
+            <span>高级编辑器加载中...</span>
+            <el-button link type="primary" @click="editorMode = 'simple'">使用简易版输入代码</el-button>
+          </div>
+          <el-alert v-if="editorMode === 'simple' && editorStatus === 'failed'" class="editor-fallback-notice"
+                    title="高级编辑器暂时不可用，仍可在简易版输入并提交代码" type="warning" :closable="false" />
+          <el-alert v-if="editorMode === 'simple' && editorStatus === 'slow'" class="editor-fallback-notice"
+                    title="高级编辑器仍在加载，简易版可以直接提交代码" type="info" :closable="false" />
+          <textarea v-if="editorMode === 'simple'" v-model="code" class="simple-editor"
+                    aria-label="代码输入框" placeholder="在这里粘贴或输入代码" spellcheck="false"></textarea>
+          <div id="code-editor" v-show="editorMode === 'monaco' && editorStatus === 'ready'" class="monaco-box"></div>
+        </div>
 
       </div>
     </div>
@@ -91,7 +108,7 @@ import { ref, onMounted, onBeforeUnmount, nextTick, computed} from 'vue';
 import {useRoute, useRouter} from 'vue-router';
 import {problemApi, submissionApi, competitionApi} from '@/api';
 import {ElMessage} from 'element-plus';
-import {Back} from '@element-plus/icons-vue';
+import {Back, Loading} from '@element-plus/icons-vue';
 
 // --- Markdown & LaTeX 解析 ---
 import MarkdownIt from 'markdown-it';
@@ -136,7 +153,9 @@ const router = useRouter();
 const cid = route.query.cid;
 const pageLoading = ref(false);
 const submitting = ref(false);
-const editorReady = ref(false);
+const editorMode = ref('monaco');
+const editorStatus = ref('loading');
+const code = ref(languageSnippets.cpp);
 const problem = ref({});
 const leftWidth = ref(45);
 const containerRef = ref(null);
@@ -144,6 +163,8 @@ let editor = null;
 let monaco = null;
 let unmounted = false;
 let isDragging = false;
+let editorLoadTimer = null;
+let previousLanguage = 'cpp';
 
 const submitForm = ref({
   problemId: route.params.id,
@@ -163,10 +184,55 @@ const effectiveLimits = computed(() => {
 });
 
 const handleLanguageChange = (l) => {
-  if (!editor) return;
-  const model = editor.getModel();
-  monaco.editor.setModelLanguage(model, l === 'cpp' || l === 'c' ? 'cpp' : l);
-  editor.setValue(languageSnippets[l] || '');
+  const useTemplate = code.value === languageSnippets[previousLanguage];
+  if (useTemplate) code.value = languageSnippets[l] || '';
+  previousLanguage = l;
+  if (editor) {
+    monaco.editor.setModelLanguage(editor.getModel(), l === 'cpp' || l === 'c' ? 'cpp' : l);
+    if (useTemplate) editor.setValue(code.value);
+  }
+};
+
+const mountEditor = () => {
+  if (editor) {
+    if (editor.getValue() !== code.value) editor.setValue(code.value);
+    editor.layout();
+    return;
+  }
+  const dom = document.getElementById('code-editor');
+  if (!dom || unmounted) return;
+  editor = monaco.editor.create(dom, {
+    value: code.value,
+    language: submitForm.value.language === 'c' ? 'cpp' : submitForm.value.language,
+    theme: 'vs-dark',
+    automaticLayout: true,
+    fontSize: 14,
+    fontFamily: "'Fira Code', 'Courier New', monospace",
+    minimap: {enabled: false}
+  });
+  editor.onDidChangeModelContent(() => { code.value = editor.getValue(); });
+};
+
+const failEditor = () => {
+  if (unmounted || !['loading', 'slow'].includes(editorStatus.value)) return;
+  const wasSlow = editorStatus.value === 'slow';
+  editorStatus.value = 'failed';
+  editorMode.value = 'simple';
+  if (!wasSlow) ElMessage.warning('高级编辑器加载失败，已切换到简易版');
+};
+
+const slowEditor = () => {
+  if (unmounted || editorStatus.value !== 'loading') return;
+  editorStatus.value = 'slow';
+  editorMode.value = 'simple';
+  ElMessage.warning('高级编辑器加载较慢，已切换到简易版');
+};
+
+const handleEditorModeChange = async (mode) => {
+  if (mode !== 'monaco' || editorStatus.value !== 'ready') return;
+  await nextTick();
+  try { mountEditor(); }
+  catch { editorStatus.value = 'failed'; editorMode.value = 'simple'; }
 };
 
 const handleViewRecords = () => {
@@ -184,13 +250,12 @@ const handleSubmit = async () => {
   const token = localStorage.getItem('token');
   if (!token) return router.push('/login');
 
-  const code = editor.getValue();
-  if (!code.trim()) return ElMessage.warning("代码不能为空");
+  if (!code.value.trim()) return ElMessage.warning("代码不能为空");
 
   submitting.value = true;
 
   try {
-    submitForm.value.codeContent = code;
+    submitForm.value.codeContent = code.value;
 
     // 发起异步提交请求
     let res = cid ?
@@ -231,20 +296,18 @@ const goBackToCompetition = () => {
 };
 
 const initEditor = async () => {
-  monaco = await import('monaco-editor');
-  if (unmounted) return;
-  const dom = document.getElementById('code-editor');
-  if (!dom) return;
-  editor = monaco.editor.create(dom, {
-    value: languageSnippets.cpp,
-    language: 'cpp',
-    theme: 'vs-dark',
-    automaticLayout: true,
-    fontSize: 14,
-    fontFamily: "'Fira Code', 'Courier New', monospace",
-    minimap: {enabled: false}
-  });
-  editorReady.value = true;
+  editorLoadTimer = setTimeout(slowEditor, 30000);
+  try {
+    const loaded = await import('monaco-editor');
+    if (unmounted || !['loading', 'slow'].includes(editorStatus.value)) return;
+    monaco = loaded;
+    editorStatus.value = 'ready';
+    if (editorMode.value === 'monaco') await handleEditorModeChange('monaco');
+  } catch {
+    failEditor();
+  } finally {
+    clearTimeout(editorLoadTimer);
+  }
 };
 
 const startDrag = () => {
@@ -271,14 +334,14 @@ onMounted(async () => {
     const res = await problemApi.getById(route.params.id, cid ? Number(cid) : undefined);
     problem.value = res.data || res;
     await nextTick();
-    void initEditor().catch(() => ElMessage.error('代码编辑器加载失败，请刷新页面重试'));
   } finally {
     pageLoading.value = false;
+    void initEditor();
   }
 });
 onBeforeUnmount(() => {
   unmounted = true;
-  editorReady.value = false;
+  clearTimeout(editorLoadTimer);
   if (editor) editor.dispose();
 });
 </script>
@@ -292,7 +355,8 @@ onBeforeUnmount(() => {
 
 /* 保持原有样式不变 */
 .problem-detail {
-  height: calc(100vh - 60px);
+  box-sizing: border-box;
+  height: calc(100vh - 80px);
   padding: 10px;
   background: #f5f7fa;
 }
@@ -313,6 +377,7 @@ onBeforeUnmount(() => {
 .left-panel {
   height: 100%;
   overflow: hidden;
+  contain: paint;
   display: flex;
   flex-direction: column;
 }
@@ -345,11 +410,43 @@ onBeforeUnmount(() => {
   padding-bottom: 10px;
 }
 
-.monaco-box {
+.editor-workspace {
   flex: 1;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.monaco-box, .simple-editor, .editor-loading {
+  flex: 1;
+  width: 100%;
   border: 1px solid #dcdfe6;
   border-radius: 4px;
   min-height: 300px;
+  box-sizing: border-box;
+}
+
+.editor-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  background: #f8f9fb;
+  color: #606266;
+}
+
+.editor-loading .el-icon { font-size: 28px; color: #409eff; animation: editor-spin 1s linear infinite; }
+@keyframes editor-spin { to { transform: rotate(360deg); } }
+.editor-fallback-notice { flex: none; }
+.simple-editor {
+  padding: 16px;
+  resize: none;
+  outline: none;
+  font: 14px/1.6 'Fira Code', 'Courier New', monospace;
+  color: #303133;
+  background: #fff;
 }
 
 .editor-header {
@@ -359,6 +456,16 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #dcdfe6;
+}
+
+.left-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.left-tools > .el-button {
+  margin-left: 0;
 }
 
 .section-title {
