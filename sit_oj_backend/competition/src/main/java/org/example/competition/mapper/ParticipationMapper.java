@@ -19,7 +19,7 @@ public interface ParticipationMapper extends BaseMapper<Participation> {
      */
     @Select("SELECT p.*, u.username , u.real_name FROM participations p " +
             "LEFT JOIN users u ON p.user_id = u.id " +
-            "WHERE p.competition_id = #{competitionId} " +
+            "WHERE p.competition_id = #{competitionId} AND p.is_practice = 0 " +
             "ORDER BY p.solved_count DESC, p.total_penalty ASC, p.user_id ASC")
     List<Participation> getRanklist(@Param("competitionId") Integer competitionId);
 
@@ -28,7 +28,7 @@ public interface ParticipationMapper extends BaseMapper<Participation> {
      */
     @Select("SELECT p.*, u.username , u.real_name FROM participations p " +
             "LEFT JOIN users u ON p.user_id = u.id " +
-            "WHERE p.competition_id = #{competitionId} " +
+            "WHERE p.competition_id = #{competitionId} AND p.is_practice = 0 " +
             "ORDER BY p.solved_count DESC, p.total_penalty ASC, p.user_id ASC")
     IPage<Participation> getRanklistPage(Page<Participation> page, @Param("competitionId") Integer competitionId);
 }

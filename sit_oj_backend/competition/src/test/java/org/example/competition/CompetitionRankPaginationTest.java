@@ -1,7 +1,10 @@
 package org.example.competition;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.apache.ibatis.session.Configuration;
 import org.example.competition.entity.Competition;
 import org.example.competition.entity.CompetitionSubmissionStats;
 import org.example.competition.entity.Participation;
@@ -20,11 +23,15 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import org.mockito.ArgumentCaptor;
+import org.apache.ibatis.annotations.Select;
 
 class CompetitionRankPaginationTest {
 
@@ -33,6 +40,34 @@ class CompetitionRankPaginationTest {
         verifyPagination(false, 17);
         verifyPagination(true, 17);
         verifyPagination(true, 25);
+    }
+
+    @Test
+    void rankQueriesExcludePracticeParticipants() throws Exception {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new Configuration(), "test"), Participation.class);
+        Select pageQuery = ParticipationMapper.class
+                .getMethod("getRanklistPage", Page.class, Integer.class).getAnnotation(Select.class);
+        assertTrue(String.join(" ", pageQuery.value()).contains("p.is_practice = 0"));
+
+        CompetitionServiceImpl service = new CompetitionServiceImpl();
+        CompetitionMapper competitions = mock(CompetitionMapper.class);
+        ParticipationMapper participations = mock(ParticipationMapper.class);
+        RankingService ranking = mock(RankingService.class);
+        ReflectionTestUtils.setField(service, "baseMapper", competitions);
+        ReflectionTestUtils.setField(service, "participationMapper", participations);
+        ReflectionTestUtils.setField(service, "rankingService", ranking);
+        when(participations.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+        when(participations.getRanklistPage(any(Page.class), eq(17))).thenAnswer(call -> {
+            Page<Participation> page = call.getArgument(0);
+            page.setRecords(List.of());
+            return page;
+        });
+
+        service.getRanklist(17, 1, 20);
+
+        ArgumentCaptor<LambdaQueryWrapper<Participation>> countQuery = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(participations).selectCount(countQuery.capture());
+        assertTrue(countQuery.getValue().getSqlSegment().contains("is_practice"));
     }
 
     private void verifyPagination(boolean frozen, int cachedCount) {

@@ -32,20 +32,14 @@ public class ParticipationServiceImpl extends ServiceImpl<ParticipationMapper, P
             return Result.error("您已经报名过该比赛");
         }
 
-        // 2. 时间校验：如果当前时间已经超过比赛结束时间，禁止报名
-        LocalDateTime now = LocalDateTime.now();
-        if (now.isBefore(competition.getEndTime())) {
-
-            System.out.println("现在时间是"  + now);
-            System.out.println("比赛结束时间是" + competition.getEndTime());
-
-            Participation p = new Participation();
-            p.setUserId(userId);
-            p.setCompetitionId(cid);
-            p.setSolvedCount(0);
-            p.setTotalPenalty(0);
-            this.baseMapper.insert(p);
-        }
+        // A practice entry grants access after the contest without joining its ranklist.
+        Participation p = new Participation();
+        p.setUserId(userId);
+        p.setCompetitionId(cid);
+        p.setSolvedCount(0);
+        p.setTotalPenalty(0);
+        p.setIsPractice(!LocalDateTime.now().isBefore(competition.getEndTime()));
+        this.baseMapper.insert(p);
 
         return Result.success("报名成功");
     }
