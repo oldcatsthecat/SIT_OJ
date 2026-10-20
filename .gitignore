@@ -13,6 +13,7 @@
 !.agents/skills/
 .agents/skills/*
 !.agents/skills/oj-remote-deploy/
+!.agents/skills/github-api-push/
 .claude/
 skills-lock.json
 incident-backups/
