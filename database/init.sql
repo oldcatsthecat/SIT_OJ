@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS participations (
                                               competition_id INT NOT NULL,
                                               solved_count INT DEFAULT 0,
                                               total_penalty INT DEFAULT 0,
+                                              is_practice TINYINT(1) NOT NULL DEFAULT 0,
                                               PRIMARY KEY (user_id, competition_id),
     CONSTRAINT fk_part_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_part_contest FOREIGN KEY (competition_id) REFERENCES competitions(competition_id) ON DELETE CASCADE
