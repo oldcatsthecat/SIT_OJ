@@ -22,5 +22,8 @@ public interface SubmissionService extends IService<Submission> {
 
     IPage<Submission> getCompetitionSubmissions(Integer current, Integer size, Integer competitionId, Integer userId, String role);
 
+    IPage<Submission> getCompetitionSubmissions(Integer current, Integer size, Integer competitionId, Integer userId,
+                                                 String role, String username, Integer problemId, String status);
+
     java.util.List<java.util.Map<String, Object>> getExportSubmissions(Integer competitionId);
 }

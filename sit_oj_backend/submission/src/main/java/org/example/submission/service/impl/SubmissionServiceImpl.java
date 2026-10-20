@@ -134,19 +134,18 @@ public class SubmissionServiceImpl extends ServiceImpl<SubmissionMapper, Submiss
 
     @Override
     public IPage<Submission> getCompetitionSubmissions(Integer current, Integer size, Integer competitionId, Integer userId, String role) {
+        return getCompetitionSubmissions(current, size, competitionId, userId, role, null, null, null);
+    }
+
+    @Override
+    public IPage<Submission> getCompetitionSubmissions(Integer current, Integer size, Integer competitionId, Integer userId,
+                                                        String role, String username, Integer problemId, String status) {
         if (!"ADMIN".equals(role)) {
             Result<Boolean> access = userId == null ? null : competitionFeignClient.checkAccess(competitionId, userId);
             if (access == null || access.getCode() != 200 || !Boolean.TRUE.equals(access.getData())) {
                 throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "无权查看比赛提交");
             }
         }
-        QueryWrapper<Submission> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("competition_id", competitionId)
-                .orderByDesc("submission_id");
-
-        Page<Submission> pageParam = new Page<>(current, size);
-        IPage<Submission> result = submissionMapper.selectPage(pageParam, queryWrapper);
-
         // 检查封榜状态
         boolean frozenFlag = true;
         try {
@@ -158,24 +157,43 @@ public class SubmissionServiceImpl extends ServiceImpl<SubmissionMapper, Submiss
         final boolean isFrozen = frozenFlag;
 
         boolean isAdmin = "ADMIN".equals(role);
+        QueryWrapper<Submission> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("competition_id", competitionId);
+        if (problemId != null) queryWrapper.eq("problem_id", problemId);
+        if (username != null && !username.isBlank()) {
+            String search = username.trim().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+            queryWrapper.apply("EXISTS (SELECT 1 FROM users u WHERE u.id = user_id " +
+                    "AND u.username LIKE CONCAT('%', {0}, '%'))", search);
+        }
+        if (status != null && !status.isBlank()) {
+            String selectedStatus = status.trim();
+            if (isFrozen && !isAdmin) {
+                if ("Frozen".equals(selectedStatus)) {
+                    queryWrapper.ne("user_id", userId);
+                } else {
+                    queryWrapper.eq("user_id", userId).eq("status", selectedStatus);
+                }
+            } else {
+                queryWrapper.eq("status", selectedStatus);
+            }
+        }
+        queryWrapper.orderByDesc("submission_id");
+        Page<Submission> pageParam = new Page<>(current, size);
+        IPage<Submission> result = submissionMapper.selectPage(pageParam, queryWrapper);
 
         result.getRecords().forEach(sub -> {
             sub.setCodeContent(null);
             sub.setJudgeInfo(null);
             sub.setErrorMessage(null);
+            boolean isOwner = userId != null && userId.equals(sub.getUserId());
+            sub.setCanSeeDetail(isOwner || isAdmin);
+            if (isFrozen && !isAdmin && !isOwner) {
+                sub.setStatus("Frozen");
+            }
             try {
                 java.util.Map<String, Object> user = userFeignClient.getUserById(sub.getUserId());
                 if (user != null && user.get("username") != null) {
                     sub.setUsername(user.get("username").toString());
-                }
-
-                boolean isOwner = userId != null && userId.equals(sub.getUserId());
-                sub.setCanSeeDetail(isOwner || isAdmin);
-                sub.setCodeContent(null);
-
-                // 封榜期间：管理员和提交者本人可以看到真实结果，其他人看到 Frozen
-                if (isFrozen && !isAdmin && !isOwner) {
-                    sub.setStatus("Frozen");
                 }
             } catch (Exception e) {
                 sub.setUsername("未知用户");

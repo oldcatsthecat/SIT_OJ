@@ -146,12 +146,16 @@ public class SubmissionController {
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "15") Integer size,
             @RequestParam Integer competitionId,
+            @RequestParam(required = false) String username,
+            @RequestParam(required = false) Integer problemId,
+            @RequestParam(required = false) String status,
             HttpServletRequest request) {
 
         Integer userId = (Integer) request.getAttribute("userId");
         String role = (String) request.getAttribute("userRole");
 
-        IPage<Submission> page = submissionService.getCompetitionSubmissions(current, size, competitionId, userId, role);
+        IPage<Submission> page = submissionService.getCompetitionSubmissions(current, size, competitionId, userId, role,
+                username, problemId, status);
 
         return Result.success(page);
     }
