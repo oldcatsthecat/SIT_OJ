@@ -12,6 +12,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import static org.junit.jupiter.api.Assertions.*;
@@ -68,5 +69,13 @@ class TestCaseUploadSecurityTest {
         assertTrue(Files.readString(base.resolve("22/info")).contains("case_1.in"));
         assertEquals("test", Files.readString(base.resolve("22/case_1.out")));
         try (var entries = Files.list(base)) { assertEquals(1, entries.count()); }
+    }
+
+    @Test void uploadedCaseDirectoryIsAccessibleToSpjUser() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeTrue(Files.getFileStore(base).supportsFileAttributeView("posix"));
+        service.processAndSync(zip("case_1.in"), "35", true);
+        var permissions = Files.getPosixFilePermissions(base.resolve("35"));
+        assertTrue(permissions.contains(PosixFilePermission.OTHERS_EXECUTE));
+        assertTrue(permissions.contains(PosixFilePermission.OTHERS_READ));
     }
 }
