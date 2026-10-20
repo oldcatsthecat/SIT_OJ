@@ -79,3 +79,7 @@ GitHub PR #4 的代码已部署到服务器。迁移前 `judge_outbox` 不存在
 ## 2026-10-20 赛后练习权限修复
 
 仅发布比赛服务修复与 `participations.is_practice` 迁移。执行迁移前的完整数据库备份为 `incident-backups/sit_oj-before-practice-20261020-152122.sql`（3,437,855 字节，权限 `600`）；旧源码与 JAR 备份为 `incident-backups/code-before-practice-20261020-152212.tar.gz`（权限 `600`）；旧镜像保留为 `sit_oj-oj-competition:pre-practice-20261020`。迁移后 `is_practice` 为 `TINYINT(1) NOT NULL DEFAULT 0`，51 条原有参与记录均为正式参赛记录。新比赛容器内 `/app.jar` 的 SHA-256 为 `d54487176a3749f5251a6d542f2de8c944fdc0041aaf808cdb5aeeeaf04215df`，与本地构建产物一致。比赛列表、已结束比赛详情及排行榜接口均返回 HTTP/API 200；12 个容器运行，最近比赛服务日志无错误。本次未使用真实账号创建赛后练习记录；授权链路由本地比赛模块测试验证。服务器家目录中的上传包与临时脚本已清理。
+
+## 2026-10-20 比赛提交筛选发布
+
+发布了提交服务的用户名、题号、状态筛选和前端比赛提交列表。旧 JAR、相关源码和前端文件备份为 `incident-backups/code-before-submission-filters-20261020.tar.gz`（权限 `600`），旧镜像标签为 `sit_oj-oj-submission:pre-submission-filters-20261020`。新容器 `/app.jar` 的 SHA-256 为 `db58b7d9cd7e6b22a9d4878d5286e2ae3f84428bf092fedc20938cf1ded7daa7`，前端 `index.html` 为 `c0408746a1cabd2d23aa8d2de5a99efd1c60a037ab4d70b081d8e4de9b62c183`，均与本地构建一致。12 个容器运行、提交服务已注册到 Nacos、Nginx 配置检查通过、首页与比赛列表 HTTP 200。发布前本地提交服务测试（含封榜状态遮盖与状态筛选）和前端构建通过。生产数据库原有 4 场比赛，均未设置封榜；先用已有比赛验证组合筛选接口，再经用户授权创建临时封榜比赛、独立测试题目和两名测试用户。真实普通用户请求验证：他人的提交及用户名、题号筛选结果均显示 `Frozen`，`AC` 筛选不返回他人的真实结果，本人结果可见。测试数据已删除，比赛、题目、用户、参赛、提交表的记录数恢复为测试前的 `4/35/62/52/845`。测试前完整数据库备份为 `incident-backups/sit_oj-before-freeze-smoke-20261020-180225.sql`（3.3 MiB，权限 `600`）。服务器家目录中的临时上传文件已清理。

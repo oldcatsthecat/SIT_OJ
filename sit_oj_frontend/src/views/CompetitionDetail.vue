@@ -116,6 +116,22 @@
         </div>
 
         <template v-else>
+          <div class="submission-filters">
+            <el-input v-model="subFilters.username" placeholder="搜索用户名" clearable class="username-filter"
+                      @keyup.enter="applySubmissionFilters" @clear="applySubmissionFilters" />
+            <el-select v-model="subFilters.problemId" placeholder="全部题号" clearable class="select-filter"
+                       @change="applySubmissionFilters">
+              <el-option v-for="(problem, index) in competition.problems" :key="problem.problemId"
+                         :label="`${String.fromCharCode(65 + index)} · ${problem.problemName}`"
+                         :value="problem.problemId" />
+            </el-select>
+            <el-select v-model="subFilters.status" placeholder="全部状态" clearable class="select-filter"
+                       @change="applySubmissionFilters">
+              <el-option v-for="option in submissionStatuses" :key="option.value"
+                         :label="option.label" :value="option.value" />
+            </el-select>
+            <el-button type="primary" @click="applySubmissionFilters">搜索</el-button>
+          </div>
           <el-table :data="compSubmissions" v-loading="subLoading" stripe border>
             <el-table-column label="运行 ID" width="100">
               <template #default="{ row }">
@@ -277,6 +293,14 @@ let timer = null;
 const subLoading = ref(false);
 const compSubmissions = ref([]);
 const subPage = reactive({current: 1, size: 15, total: 0});
+const subFilters = reactive({username: '', problemId: '', status: ''});
+const submissionStatuses = [
+  {value: 'AC', label: 'AC'}, {value: 'WA', label: 'WA'},
+  {value: 'CE', label: 'CE'}, {value: 'TLE', label: 'TLE'},
+  {value: 'MLE', label: 'MLE'}, {value: 'RE', label: 'RE'},
+  {value: 'SE', label: 'SE'}, {value: 'Pending', label: 'Pending'},
+  {value: 'JUDGING', label: 'JUDGING'}, {value: 'Frozen', label: 'Frozen'}
+];
 // 轮询定时器
 const subPollTimer = ref(null);
 
@@ -370,15 +394,28 @@ const fetchData = async () => {
   }
 };
 
-const fetchCompSubmissions = async (isSilent = false) => {
+let subRequestId = 0;
+const applySubmissionFilters = () => {
+  subPage.current = 1;
+  stopSubPolling();
+  fetchCompSubmissions();
+};
+
+const fetchCompSubmissions = async (pageOrSilent = false) => {
   if (!canViewProblems.value) return;
+  const isSilent = pageOrSilent === true;
+  const requestId = ++subRequestId;
   if (!isSilent) subLoading.value = true;
   try {
     const res = await submissionApi.getCompetitionSubmissions({
       current: subPage.current,
       size: subPage.size,
-      competitionId: compId
+      competitionId: compId,
+      username: subFilters.username.trim() || undefined,
+      problemId: subFilters.problemId || undefined,
+      status: subFilters.status || undefined
     });
+    if (requestId !== subRequestId) return;
     if (res && res.code === 200) {
       compSubmissions.value = res.data.records;
       subPage.total = res.data.total;
@@ -394,7 +431,7 @@ const fetchCompSubmissions = async (isSilent = false) => {
       }
     }
   } finally {
-    if (!isSilent) subLoading.value = false;
+    if (!isSilent && requestId === subRequestId) subLoading.value = false;
   }
 };
 
@@ -567,6 +604,17 @@ const formatTime = (t) => t ? dayjs(t).format('YYYY-MM-DD HH:mm:ss') : '-';
 .competition-detail-container {
   max-width: 1200px;
   margin: 20px auto;
+}
+
+.submission-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.username-filter, .select-filter {
+  width: 200px;
 }
 
 .header-card {
